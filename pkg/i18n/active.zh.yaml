@@ -1,0 +1,18 @@
+commands.CmdLongDesc:
+    hash: sha1-c20a3805a59352ad9d22ff1ea4135240358a372e
+    other: |-
+        Gosh 是一个 LLM 增强的 shell 。
+
+        实际上它不是一个 shell ，而是 zsh / bash 等 shell 的增强包装。你可以像往常一样使用你熟悉的 shell ，但是它比过去更好了。
+commands.CmdShortDesc:
+    hash: sha1-05a0aac5e9cd61414ec8b30b17cd408afee0465e
+    other: Gosh 是一个 LLM 增强的 shell 。
+commands.CmdShortDescVersion:
+    hash: sha1-79526ef3b57592a549aa6b35ce7596080ebf5668
+    other: 打印版本信息
+commands.GlobalOptsVerbosityDesc:
+    hash: sha1-d99c2b79a5d6e3a42f969d5df2dd282899e7e5fd
+    other: 日志级别 (0, 1, 或 2)
+commands.VersionOptsOutputFormatDesc:
+    hash: sha1-43a90ee888e64bc5efd1f81974af5fafee8ab9a6
+    other: 输出格式 (json, yaml)
