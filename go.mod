@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/bombsimon/logrusr/v4 v4.1.0
+	github.com/creack/pty v1.1.24
 	github.com/firebase/genkit/go v1.8.0
 	github.com/go-logr/logr v1.4.3
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
@@ -11,6 +12,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
+	golang.org/x/term v0.43.0
 	golang.org/x/text v0.32.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
