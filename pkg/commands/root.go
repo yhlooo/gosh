@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/yhlooo/gosh/pkg/i18n"
+	"github.com/yhlooo/gosh/pkg/iotrace"
 	"github.com/yhlooo/gosh/pkg/version"
 )
 
@@ -123,7 +125,7 @@ func NewCommand(name string) *cobra.Command {
 
 			// 创建日志目录
 			logDir := filepath.Join(globalOpts.Home, "logs")
-			if err := os.MkdirAll(logDir, 0o755); err != nil {
+			if err := os.MkdirAll(logDir, 0755); err != nil {
 				return fmt.Errorf("create log directory %q error: %w", logDir, err)
 			}
 
@@ -189,34 +191,20 @@ func run(ctx context.Context, opts Options) error {
 
 	cmd := exec.CommandContext(ctx, opts.Shell)
 
-	// 设置标准错误流
-	errPTY, errTTY, err := pty.Open()
-	if err != nil {
-		return fmt.Errorf("open stderr pty error: %w", err)
-	}
-	defer func() {
-		_ = errTTY.Close()
-		_ = errPTY.Close()
-	}()
-	cmd.Stderr = errTTY
-
-	// 设置标准输入输出流并启动 shell
-	ioPTY, err := pty.Start(cmd)
+	// 设置输入输出流并启动 shell
+	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return fmt.Errorf("start %q error: %w", opts.Shell, err)
 	}
-	defer func() { _ = ioPTY.Close() }()
+	defer func() { _ = ptmx.Close() }()
 
 	// 处理窗口大小变化信号
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
 	go func() {
 		for range ch {
-			if err := pty.InheritSize(os.Stdin, ioPTY); err != nil {
-				logger.Error(err, "resize stdin / stdout pty error")
-			}
-			if err := pty.InheritSize(os.Stdin, errPTY); err != nil {
-				logger.Error(err, "resize stderr pty error")
+			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
+				logger.Error(err, "resize pty error")
 			}
 		}
 	}()
@@ -226,6 +214,31 @@ func run(ctx context.Context, opts Options) error {
 		close(ch)
 	}()
 
+	ptyInW := io.Writer(ptmx)
+	ptyOutW := io.Writer(os.Stdout)
+	if globalOpts.Debug {
+		traceID := fmt.Sprintf("%x", rand.Uint64())
+		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] trace id: %s\n", traceID)
+		logDir := filepath.Join(globalOpts.Home, "logs", traceID)
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return fmt.Errorf("create trace log directory %q error: %w", logDir, err)
+		}
+
+		inTracer, err := iotrace.NewFileTracer(filepath.Join(logDir, "input.log"), filepath.Join(logDir, "input.raw"))
+		if err != nil {
+			return fmt.Errorf("create input tracer error: %w", err)
+		}
+		defer func() { _ = inTracer.Close() }()
+		ptyInW = inTracer.TraceWriter(ptyInW)
+
+		outTracer, err := iotrace.NewFileTracer(filepath.Join(logDir, "output.log"), filepath.Join(logDir, "output.raw"))
+		if err != nil {
+			return fmt.Errorf("create output tracer error: %w", err)
+		}
+		defer func() { _ = outTracer.Close() }()
+		ptyOutW = outTracer.TraceWriter(ptyOutW)
+	}
+
 	// 设置输入流为 raw 格式
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
@@ -233,37 +246,8 @@ func run(ctx context.Context, opts Options) error {
 	}
 	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
 
-	stdinW := io.Writer(ioPTY)
-	stdoutW := io.Writer(os.Stdout)
-	stderrW := io.Writer(os.Stderr)
-	if globalOpts.Debug {
-		logDir := filepath.Join(globalOpts.Home, "logs")
-
-		stdinF, err := os.OpenFile(filepath.Join(logDir, "stdin"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-		if err != nil {
-			return fmt.Errorf("open stdin log error: %w", err)
-		}
-		defer func() { _ = stdinF.Close() }()
-		stdinW = io.MultiWriter(stdinW, stdinF)
-
-		stdoutF, err := os.OpenFile(filepath.Join(logDir, "stdout"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-		if err != nil {
-			return fmt.Errorf("open stdout log error: %w", err)
-		}
-		defer func() { _ = stdoutF.Close() }()
-		stdoutW = io.MultiWriter(stdoutW, stdoutF)
-
-		stderrF, err := os.OpenFile(filepath.Join(logDir, "stderr"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-		if err != nil {
-			return fmt.Errorf("open stderr log error: %w", err)
-		}
-		defer func() { _ = stderrF.Close() }()
-		stderrW = io.MultiWriter(stderrW, stderrF)
-	}
-
-	go func() { _, _ = io.Copy(stdinW, os.Stdin) }()
-	go func() { _, _ = io.Copy(stderrW, errPTY) }()
-	_, _ = io.Copy(stdoutW, ioPTY)
+	go func() { _, _ = io.Copy(ptyInW, os.Stdin) }()
+	_, _ = io.Copy(ptyOutW, ptmx)
 
 	return nil
 }
@@ -275,11 +259,11 @@ func setKeyLog() (*os.File, error) {
 		return nil, nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(keylog), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(keylog), 0755); err != nil {
 		return nil, err
 	}
 
-	f, err := os.OpenFile(keylog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(keylog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
