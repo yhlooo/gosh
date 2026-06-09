@@ -4,28 +4,22 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/bombsimon/logrusr/v4"
-	"github.com/creack/pty"
 	"github.com/go-logr/logr"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"golang.org/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/yhlooo/gosh/pkg/controllers"
 	"github.com/yhlooo/gosh/pkg/i18n"
-	"github.com/yhlooo/gosh/pkg/iotrace"
 	"github.com/yhlooo/gosh/pkg/version"
 )
 
@@ -186,70 +180,29 @@ func NewCommand(name string) *cobra.Command {
 
 // run 运行
 func run(ctx context.Context, opts Options) error {
-	logger := logr.FromContextOrDiscard(ctx)
 	globalOpts := GlobalOptionsFromContext(ctx)
 
-	cmd := exec.CommandContext(ctx, opts.Shell)
-
-	// 设置输入输出流并启动 shell
-	ptmx, err := pty.Start(cmd)
-	if err != nil {
-		return fmt.Errorf("start %q error: %w", opts.Shell, err)
-	}
-	defer func() { _ = ptmx.Close() }()
-
-	// 处理窗口大小变化信号
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGWINCH)
-	go func() {
-		for range ch {
-			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
-				logger.Error(err, "resize pty error")
-			}
-		}
-	}()
-	ch <- syscall.SIGWINCH
-	defer func() {
-		signal.Stop(ch)
-		close(ch)
-	}()
-
-	ptyInW := io.Writer(ptmx)
-	ptyOutW := io.Writer(os.Stdout)
+	logDir := ""
 	if globalOpts.Debug {
 		traceID := fmt.Sprintf("%x", rand.Uint64())
 		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] trace id: %s\n", traceID)
-		logDir := filepath.Join(globalOpts.Home, "logs", traceID)
+		logDir = filepath.Join(globalOpts.Home, "logs", traceID)
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			return fmt.Errorf("create trace log directory %q error: %w", logDir, err)
 		}
-
-		inTracer, err := iotrace.NewFileTracer(filepath.Join(logDir, "input.log"), filepath.Join(logDir, "input.raw"))
-		if err != nil {
-			return fmt.Errorf("create input tracer error: %w", err)
-		}
-		defer func() { _ = inTracer.Close() }()
-		ptyInW = inTracer.TraceWriter(ptyInW)
-
-		outTracer, err := iotrace.NewFileTracer(filepath.Join(logDir, "output.log"), filepath.Join(logDir, "output.raw"))
-		if err != nil {
-			return fmt.Errorf("create output tracer error: %w", err)
-		}
-		defer func() { _ = outTracer.Close() }()
-		ptyOutW = outTracer.TraceWriter(ptyOutW)
 	}
 
-	// 设置输入流为 raw 格式
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	ctl, err := controllers.New(controllers.Options{
+		Command:     opts.Shell,
+		Args:        nil,
+		Env:         nil,
+		TraceLogDir: logDir,
+	})
 	if err != nil {
-		return fmt.Errorf("set stdin raw error: %w", err)
+		return err
 	}
-	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
 
-	go func() { _, _ = io.Copy(ptyInW, os.Stdin) }()
-	_, _ = io.Copy(ptyOutW, ptmx)
-
-	return nil
+	return ctl.Run(ctx)
 }
 
 // setKeyLog 设置 TLS keylog
