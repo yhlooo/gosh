@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/bombsimon/logrusr/v4 v4.1.0
 	github.com/creack/pty v1.1.24
+	github.com/danielgatis/go-vte v1.0.11
 	github.com/firebase/genkit/go v1.8.0
 	github.com/go-logr/logr v1.4.3
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
@@ -22,6 +23,7 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
+	github.com/danielgatis/go-utf8 v1.0.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/goccy/go-yaml v1.17.1 // indirect
 	github.com/google/dotprompt/go v0.0.0-20251014011017-8d056e027254 // indirect

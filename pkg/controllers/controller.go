@@ -8,14 +8,17 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"syscall"
 
 	"github.com/creack/pty"
+	"github.com/danielgatis/go-vte"
 	"github.com/go-logr/logr"
 	"golang.org/x/term"
 
 	"github.com/yhlooo/gosh/pkg/iotrace"
+	"github.com/yhlooo/gosh/pkg/ui"
 )
 
 // Options 运行选项
@@ -53,11 +56,17 @@ func New(opts Options) (*Controller, error) {
 type Controller struct {
 	opts Options
 
-	started atomic.Int32
+	started   atomic.Int32
+	inputLock sync.Mutex
 
-	cmd    *exec.Cmd
-	ptmx   *os.File
-	output *os.File
+	logger         logr.Logger
+	cmd            *exec.Cmd
+	ptmx           *os.File
+	output         *os.File
+	inputVTEParser *vte.Parser
+
+	curInputMode  InputMode
+	agentInputBox *ui.InputBox
 }
 
 const (
@@ -72,6 +81,7 @@ const (
 // NOTE: 只能执行一次
 func (ctl *Controller) Run(ctx context.Context) error {
 	logger := logr.FromContextOrDiscard(ctx).WithName("controller")
+	ctl.logger = logger
 
 	started := ctl.started.Add(1)
 	if started > 1 {
@@ -115,9 +125,12 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	}()
 
 	ctl.output = os.Stdout
+	ctl.agentInputBox = ui.NewInputBox(ctl.output)
 
-	ptyInW := io.Writer(WriterFn(ctl.handleInput))
-	ptyOutW := io.Writer(WriterFn(ctl.handleOutput))
+	ctl.inputVTEParser = vte.NewParser(ctl.InputHandler())
+	ptyInW := io.Writer(ctl.InputHandler())
+	ptyOutW := io.Writer(ctl.output)
+
 	if ctl.opts.TraceLogDir != "" {
 		inTracer, err := iotrace.NewFileTracer(
 			filepath.Join(ctl.opts.TraceLogDir, TraceInputLogFile),
