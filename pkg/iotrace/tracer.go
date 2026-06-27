@@ -45,8 +45,6 @@ type Tracer struct {
 	raw       io.Writer
 	logWriter io.Writer
 	logger    *slog.Logger
-
-	lineBuff []byte
 }
 
 var _ io.WriteCloser = (*Tracer)(nil)
@@ -62,28 +60,9 @@ func (t *Tracer) Write(p []byte) (n int, err error) {
 	defer t.lock.Unlock()
 
 	_, _ = t.raw.Write(p)
-	for _, c := range p {
-		t.recordByte(c)
-	}
+	t.logger.Info(string(p))
 
 	return len(p), nil
-}
-
-// recordByte 记录字节
-func (t *Tracer) recordByte(c byte) {
-	switch c {
-	case '\n':
-		// 换行刷一下缓冲区
-		t.logger.Info(string(append(t.lineBuff, c)))
-		t.lineBuff = nil
-	default:
-		t.lineBuff = append(t.lineBuff, c)
-		if len(t.lineBuff) >= 4<<10 {
-			// 缓冲区内容太多了，刷一下缓冲区
-			t.logger.Info(string(t.lineBuff))
-			t.lineBuff = nil
-		}
-	}
 }
 
 // Close 关闭
