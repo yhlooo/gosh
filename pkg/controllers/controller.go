@@ -18,7 +18,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/yhlooo/gosh/pkg/agents"
-	"github.com/yhlooo/gosh/pkg/iotrace"
 	"github.com/yhlooo/gosh/pkg/ui"
 )
 
@@ -61,16 +60,18 @@ func New(opts Options) (*Controller, error) {
 type Controller struct {
 	opts Options
 
-	started   atomic.Int32
-	inputLock sync.Mutex
+	started    atomic.Int32
+	inputLock  sync.Mutex
+	outputLock sync.Mutex
 
-	ctx         context.Context
-	logger      logr.Logger
-	agent       agents.Agent
-	cmd         *exec.Cmd
-	ptmx        *os.File
-	output      *os.File
-	inputParser *ansi.Parser
+	ctx          context.Context
+	logger       logr.Logger
+	agent        agents.Agent
+	cmd          *exec.Cmd
+	ptmx         *os.File
+	output       *os.File
+	inputParser  *ansi.Parser
+	outputParser *ansi.Parser
 
 	curInputMode  InputMode
 	agentInputBox *ui.InputBox
@@ -146,28 +147,27 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	ctl.inputParser = ansi.NewParser()
 	ctl.inputParser.SetHandler(ctl.InputHandler().ParseHandler())
 	ptyInW := io.Writer(ctl.InputHandler())
-	ptyOutW := io.Writer(ctl.output)
+
+	ctl.outputParser = ansi.NewParser()
+	ctl.outputParser.SetHandler(ctl.OutputHandler().ParseHandler())
+	ptyOutW := io.Writer(ctl.OutputHandler())
 
 	if ctl.opts.TraceLogDir != "" {
-		inTracer, err := iotrace.NewFileTracer(
-			filepath.Join(ctl.opts.TraceLogDir, TraceInputLogFile),
-			filepath.Join(ctl.opts.TraceLogDir, TraceInputRawFile),
-		)
+		inRawFilePath := filepath.Join(ctl.opts.TraceLogDir, TraceInputRawFile)
+		inRawFile, err := os.OpenFile(inRawFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
-			return fmt.Errorf("create input tracer error: %w", err)
+			return fmt.Errorf("open input trace file %q error: %w", inRawFilePath, err)
 		}
-		defer func() { _ = inTracer.Close() }()
-		ptyInW = inTracer.TraceWriter(ptyInW)
+		defer func() { _ = inRawFile.Close() }()
+		ptyInW = io.MultiWriter(ptyInW, inRawFile)
 
-		outTracer, err := iotrace.NewFileTracer(
-			filepath.Join(ctl.opts.TraceLogDir, TraceOutputLogFile),
-			filepath.Join(ctl.opts.TraceLogDir, TraceOutputRawFile),
-		)
+		outRawFilePath := filepath.Join(ctl.opts.TraceLogDir, TraceOutputRawFile)
+		outRawFile, err := os.OpenFile(outRawFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
-			return fmt.Errorf("create output tracer error: %w", err)
+			return fmt.Errorf("open output trace file %q error: %w", inRawFilePath, err)
 		}
-		defer func() { _ = outTracer.Close() }()
-		ptyOutW = outTracer.TraceWriter(ptyOutW)
+		defer func() { _ = outRawFile.Close() }()
+		ptyOutW = io.MultiWriter(ptyOutW, outRawFile)
 	}
 
 	// 设置输入流为 raw 格式

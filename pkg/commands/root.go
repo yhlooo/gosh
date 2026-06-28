@@ -191,6 +191,7 @@ func NewCommand(name string) *cobra.Command {
 
 	cmd.AddCommand(
 		newVersionCommand(),
+		newDebugCommand(),
 	)
 
 	return cmd

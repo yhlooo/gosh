@@ -13,6 +13,8 @@
 | `\x1b_` | APC – 应用程序命令（Application Program Command）  |
 | `\x1bc` | RIS – 重置为初始状态（Reset to Initial State）      |
 
+ST（`\x1b\`，即 `ESC \`）是 OSC、DCS、SOS、PM、APC 等字符串序列的终止符。在 7-bit 环境中可用 BEL（`\x07`）替代。
+
 ## CSI
 
 | 序列            | 名称                                             | 描述                                                           |
@@ -69,3 +71,24 @@
 | `CSI#R`       | XTREPORTCOLORS – 报告颜色                          | 报告当前调色板                                                      |
 | `CSI>q`       | XTVERSION – 查询终端版本                             | 查询终端名称和版本                                                    |
 | `CSI>4;<m>m`  | XTMODKEYS – 修改其他键                              | 设置其他键的修饰键协议                                                  |
+
+## OSC
+
+| 序列                                            | 名称                                     | 描述                             |
+|-----------------------------------------------|----------------------------------------|--------------------------------|
+| `OSC 133 ; A [; click_events=1] ST`           | 提示符开始 (Prompt Start)                   | 在Shell提示符开始打印前发送               |
+| `OSC 133 ; B ST`                              | 命令开始 (Command Start)                   | 提示符结束，用户开始输入命令区域               |
+| `OSC 133 ; C [; cmdline_url=<EncodedURL>] ST` | 命令已执行 (Command Executed)               | 用户按下回车，命令开始执行，可选携带命令行 URL      |
+| `OSC 133 ; D [; <ExitCode>] ST`               | 命令结束 (Command Finished)                | 命令执行完毕，可选携带退出码                 |
+| `OSC 1337 ; SetMark ST`                       | 设置标记 (Set Mark)                        | 在终端中设置一个标记                     |
+| `OSC 1337 ; ClearScrollback ST`               | 清除滚动缓冲区 (Clear Scrollback)             | 清除终端滚动缓冲区                      |
+| `OSC 1337 ; File=<name>;<opts>:<base64> ST`   | 文件传输 (File Transfer)                   | 内联文件传输，支持 base64 编码            |
+| `OSC 1337 ; RequestAttention=<n> ST`          | 请求注意 (Request Attention)               | 弹跳 Dock 图标请求用户注意，n=0 关闭、n=1 开启 |
+| `OSC 1337 ; CurrentDir=<url> ST`              | 当前目录 (Current Directory)               | 向终端报告当前工作目录                    |
+| `OSC 1337 ; RemoteHost=<user>@<host> ST`      | 远程主机 (Remote Host)                     | 向终端报告当前连接的远程主机                 |
+| `OSC 1337 ; ShellIntegrationVersion=<n> ST`   | Shell 集成版本 (Shell Integration Version) | 报告 Shell 集成协议版本号               |
+| `OSC 1337 ; SetUserVar=<name>=<value> ST`     | 设置用户变量 (Set User Variable)             | 设置用户自定义变量                      |
+| `OSC 1337 ; CopyToClipboard=<base64> ST`      | 复制到剪贴板 (Copy to Clipboard)             | 将内容复制到系统剪贴板                    |
+| `OSC 1337 ; ReportCellSize ST`                | 报告单元格大小 (Report Cell Size)             | 查询终端单元格像素尺寸                    |
+| `OSC 1337 ; HighlightCursorLine=<n> ST`       | 高亮光标行 (Highlight Cursor Line)          | 高亮光标所在行，n=0 关闭、n=1 开启          |
+| `OSC 1337 ; StealFocus ST`                    | 获取焦点 (Steal Focus)                     | 使终端窗口获取焦点                      |

@@ -35,4 +35,7 @@ Actually it is not a shell, but an enhanced wrapper for shells like zsh / bash. 
 
 	MsgCmdShortDescVersion         = &i18n.Message{ID: "commands.CmdShortDescVersion", Other: "Print the version information"}
 	MsgVersionOptsOutputFormatDesc = &i18n.Message{ID: "commands.VersionOptsOutputFormatDesc", Other: "Output format. One of (json, yaml)"}
+
+	MsgCmdShortDescDebug          = &i18n.Message{ID: "commands.CmdShortDescDebug", Other: "Debug tools (internal)"}
+	MsgCmdShortDescDebugParseANSI = &i18n.Message{ID: "commands.CmdShortDescDebugParseANSI", Other: "Parse ANSI from STDIN"}
 )
