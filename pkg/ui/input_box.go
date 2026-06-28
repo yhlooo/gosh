@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/danielgatis/go-vte"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // NewInputBox 创建输入框
@@ -16,7 +16,8 @@ func NewInputBox(echoWriter io.Writer) *InputBox {
 		echoWriter: echoWriter,
 		content:    [][]rune{nil},
 	}
-	ib.parser = vte.NewParser(ib)
+	ib.parser = ansi.NewParser()
+	ib.parser.SetHandler(ib.ansiHandler())
 	return ib
 }
 
@@ -24,17 +25,14 @@ func NewInputBox(echoWriter io.Writer) *InputBox {
 type InputBox struct {
 	lock       sync.Mutex
 	echoWriter io.Writer
-	parser     *vte.Parser
+	parser     *ansi.Parser
 
 	content   [][]rune
 	rowCursor int
 	colCursor int
 }
 
-var (
-	_ io.Writer     = (*InputBox)(nil)
-	_ vte.Performer = (*InputBox)(nil)
-)
+var _ io.Writer = (*InputBox)(nil)
 
 // Write 往输入框写内容
 func (ib *InputBox) Write(p []byte) (n int, err error) {
@@ -54,8 +52,8 @@ func (ib *InputBox) Activate() {
 		return
 	}
 
-	// 输入提示
-	_, _ = ib.echoWriter.Write([]byte("\r\n\x1b[0;34m> "))
+	// 发送 rmkx 和输入提示
+	_, _ = ib.echoWriter.Write([]byte("\r\n\x1b[?1l\x1b>\x1b[0;34m> "))
 }
 
 // Deactivate 停用
@@ -91,19 +89,22 @@ func (ib *InputBox) Reset() {
 	ib.colCursor = 0
 }
 
-// Print 处理普通打印字符
-func (ib *InputBox) Print(r rune) {
-	if r == DEL {
-		// 退格 Backspace
-		ib.backspace()
-		return
+// ansiHandler 返回 ANSI 序列处理器
+func (ib *InputBox) ansiHandler() ansi.Handler {
+	return ansi.Handler{
+		Print:     ib.handlePrint,
+		Execute:   ib.handleExecute,
+		HandleCsi: ib.handleCSI,
 	}
+}
 
+// handlePrint 控制打印字符
+func (ib *InputBox) handlePrint(r rune) {
 	ib.insert(r)
 }
 
-// Execute 处理控制字符
-func (ib *InputBox) Execute(b byte) {
+// handleExecute 处理控制字符
+func (ib *InputBox) handleExecute(b byte) {
 	switch b {
 	case SOH: // 行首 Ctrl+A
 		ib.toLineStart()
@@ -119,54 +120,36 @@ func (ib *InputBox) Execute(b byte) {
 		ib.insertNewLine()
 	case HT: // 制表符 Tab / Ctrl+I
 		ib.insert('\t')
+	case DEL:
+		ib.backspace()
 	}
 }
 
-// EscDispatch 处理 ESC 序列
-func (ib *InputBox) EscDispatch(_ []byte, _ bool, _ byte) {}
-
-// Hook DSC 序列开始
-func (ib *InputBox) Hook(_ [][]uint16, _ []byte, _ bool, _ rune) {}
-
-// Put 处理 DSC 序列内容
-func (ib *InputBox) Put(_ byte) {}
-
-// Unhook DSC 序列结束
-func (ib *InputBox) Unhook() {}
-
-// CsiDispatch 处理 CSI 序列
-func (ib *InputBox) CsiDispatch(params [][]uint16, intermediates []byte, ignore bool, r rune) {
-	if ignore {
-		return
-	}
-
-	if len(intermediates) > 0 {
-		return
-	}
-
-	switch r {
+// handleCSI 处理 CSI 序列
+func (ib *InputBox) handleCSI(cmd ansi.Cmd, params ansi.Params) {
+	switch cmd.Final() {
 	case 'A': // 上移 Up
 		n := 1
-		if len(params) == 1 && len(params[0]) == 1 {
-			n = int(params[0][0])
+		if len(params) == 1 {
+			n = int(params[0])
 		}
 		ib.moveUp(n)
 	case 'B': // 下移 Down
 		n := 1
-		if len(params) == 1 && len(params[0]) == 1 {
-			n = int(params[0][0])
+		if len(params) == 1 {
+			n = int(params[0])
 		}
 		ib.moveDown(n)
 	case 'C': // 右移 Right
 		n := 1
-		if len(params) == 1 && len(params[0]) == 1 {
-			n = int(params[0][0])
+		if len(params) == 1 {
+			n = int(params[0])
 		}
 		ib.moveRight(n)
 	case 'D': // 左移 Left
 		n := 1
-		if len(params) == 1 && len(params[0]) == 1 {
-			n = int(params[0][0])
+		if len(params) == 1 {
+			n = int(params[0])
 		}
 		ib.moveLeft(n)
 	case 'H': // 行首 Home
@@ -174,18 +157,12 @@ func (ib *InputBox) CsiDispatch(params [][]uint16, intermediates []byte, ignore 
 	case 'F': // 行尾 End
 		ib.toLineEnd()
 	case '~':
-		if len(params) == 1 && len(params[0]) == 1 && params[0][0] == 3 {
+		if len(params) == 1 && params[0] == 3 {
 			// Delete
 			ib.delete()
 		}
 	}
 }
-
-// OscDispatch 处理 OSC 序列
-func (ib *InputBox) OscDispatch(_ [][]byte, _ bool) {}
-
-// SosPmApcDispatch 处理 SOS 序列
-func (ib *InputBox) SosPmApcDispatch(_ vte.SosPmApcKind, _ []byte, _ bool) {}
 
 // moveUp 光标上移
 func (ib *InputBox) moveUp(n int) {

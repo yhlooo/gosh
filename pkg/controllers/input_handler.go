@@ -5,7 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/danielgatis/go-vte"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/ansi/parser"
 )
 
 // InputMode 输入模式
@@ -28,10 +29,7 @@ func (ctl *Controller) InputHandler() *InputHandler {
 // InputHandler 输入处理器
 type InputHandler Controller
 
-var (
-	_ io.Writer     = (*InputHandler)(nil)
-	_ vte.Performer = (*InputHandler)(nil)
-)
+var _ io.Writer = (*InputHandler)(nil)
 
 // Write 处理写到 pty 的输入内容
 func (ctl *InputHandler) Write(p []byte) (n int, err error) {
@@ -41,9 +39,8 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 	curMode := ctl.curInputMode
 	buff := make([]byte, 0, len(p))
 	for i, c := range p {
-		ctl.inputVTEParser.Advance(c)
-
-		if ctl.inputVTEParser.State() != vte.GroundState {
+		ctl.inputParser.Advance(c)
+		if ctl.inputParser.State() != parser.GroundState {
 			// 非 Ground 态，可能在输入切换模式序列，内容暂时缓冲
 			buff = append(buff, c)
 			continue
@@ -87,11 +84,16 @@ func (ctl *InputHandler) writeUpstream(p []byte) (n int, err error) {
 	}
 }
 
-// Print 处理普通打印字符
-func (ctl *InputHandler) Print(r rune) {}
+// ParseHandler 返回解析 ANSI 序列处理器
+func (ctl *InputHandler) ParseHandler() ansi.Handler {
+	return ansi.Handler{
+		Execute:   ctl.handleExecute,
+		HandleCsi: ctl.handleCSI,
+	}
+}
 
-// Execute 处理控制字符
-func (ctl *InputHandler) Execute(b byte) {
+// handleExecute 处理控制字符
+func (ctl *InputHandler) handleExecute(b byte) {
 	switch {
 	case b == '\r' && ctl.curInputMode == WriteAgentInput:
 		// Enter 提交 Prompt 到 Agent
@@ -132,22 +134,10 @@ func (ctl *InputHandler) Execute(b byte) {
 	}
 }
 
-// EscDispatch 处理 ESC 序列
-func (ctl *InputHandler) EscDispatch(_ []byte, _ bool, _ byte) {}
-
-// Hook DSC 序列开始
-func (ctl *InputHandler) Hook(_ [][]uint16, _ []byte, _ bool, _ rune) {}
-
-// Put 处理 DSC 序列内容
-func (ctl *InputHandler) Put(_ byte) {}
-
-// Unhook DSC 序列结束
-func (ctl *InputHandler) Unhook() {}
-
-// CsiDispatch 处理 CSI 序列
-func (ctl *InputHandler) CsiDispatch(params [][]uint16, intermediates []byte, ignore bool, r rune) {
+// handleCSI 处理 CSI 序列
+func (ctl *InputHandler) handleCSI(cmd ansi.Cmd, _ ansi.Params) {
 	// Shift + Tab 切换输入模式
-	if !ignore && r == 'Z' && len(params) == 0 && len(intermediates) == 0 {
+	if cmd.Final() == 'Z' {
 		switch ctl.curInputMode {
 		case WriteShellInput:
 			ctl.curInputMode = WriteAgentInput
@@ -160,9 +150,3 @@ func (ctl *InputHandler) CsiDispatch(params [][]uint16, intermediates []byte, ig
 		}
 	}
 }
-
-// OscDispatch 处理 OSC 序列
-func (ctl *InputHandler) OscDispatch(_ [][]byte, _ bool) {}
-
-// SosPmApcDispatch 处理 SOS 序列
-func (ctl *InputHandler) SosPmApcDispatch(_ vte.SosPmApcKind, _ []byte, _ bool) {}

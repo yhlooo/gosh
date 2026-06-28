@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
-	"github.com/danielgatis/go-vte"
 	"github.com/go-logr/logr"
 	"golang.org/x/term"
 
@@ -64,13 +64,13 @@ type Controller struct {
 	started   atomic.Int32
 	inputLock sync.Mutex
 
-	ctx            context.Context
-	logger         logr.Logger
-	agent          agents.Agent
-	cmd            *exec.Cmd
-	ptmx           *os.File
-	output         *os.File
-	inputVTEParser *vte.Parser
+	ctx         context.Context
+	logger      logr.Logger
+	agent       agents.Agent
+	cmd         *exec.Cmd
+	ptmx        *os.File
+	output      *os.File
+	inputParser *ansi.Parser
 
 	curInputMode  InputMode
 	agentInputBox *ui.InputBox
@@ -143,7 +143,8 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	ctl.output = os.Stdout
 	ctl.agentInputBox = ui.NewInputBox(ctl.output)
 
-	ctl.inputVTEParser = vte.NewParser(ctl.InputHandler())
+	ctl.inputParser = ansi.NewParser()
+	ctl.inputParser.SetHandler(ctl.InputHandler().ParseHandler())
 	ptyInW := io.Writer(ctl.InputHandler())
 	ptyOutW := io.Writer(ctl.output)
 
