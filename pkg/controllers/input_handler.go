@@ -92,8 +92,10 @@ func (ctl *InputHandler) Print(r rune) {}
 
 // Execute 处理控制字符
 func (ctl *InputHandler) Execute(b byte) {
-	// Enter 提交 Prompt 到 Agent
-	if b == '\r' && ctl.curInputMode == WriteAgentInput {
+	switch {
+	case b == '\r' && ctl.curInputMode == WriteAgentInput:
+		// Enter 提交 Prompt 到 Agent
+
 		content := ctl.agentInputBox.Content()
 		ctl.agentInputBox.Reset()
 
@@ -116,13 +118,17 @@ func (ctl *InputHandler) Execute(b byte) {
 			ctl.agentInputBox.Activate()
 			ctl.inputLock.Unlock()
 		}()
-	}
 
-	// Ctrl+C 中断 Agent
-	if b == '\x03' && ctl.curInputMode == WaitForAgentOutput {
+	case b == '\x03' && ctl.curInputMode == WaitForAgentOutput:
+		// Ctrl+C 中断 Agent
 		if err := ctl.agent.Cancel(); err != nil {
 			ctl.logger.Error(err, "cancel agent error")
 		}
+
+	case b == '\x03' && ctl.curInputMode == WriteAgentInput:
+		ctl.curInputMode = WriteShellInput
+		ctl.agentInputBox.Deactivate()
+		ctl.agentInputBox.Reset()
 	}
 }
 
@@ -153,7 +159,6 @@ func (ctl *InputHandler) CsiDispatch(params [][]uint16, intermediates []byte, ig
 		default:
 		}
 	}
-
 }
 
 // OscDispatch 处理 OSC 序列

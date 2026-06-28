@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 
@@ -13,7 +14,7 @@ import (
 func NewInputBox(echoWriter io.Writer) *InputBox {
 	ib := &InputBox{
 		echoWriter: echoWriter,
-		content:    []string{""},
+		content:    [][]rune{nil},
 	}
 	ib.parser = vte.NewParser(ib)
 	return ib
@@ -25,7 +26,7 @@ type InputBox struct {
 	echoWriter io.Writer
 	parser     *vte.Parser
 
-	content   []string
+	content   [][]rune
 	rowCursor int
 	colCursor int
 }
@@ -71,7 +72,13 @@ func (ib *InputBox) Deactivate() {
 func (ib *InputBox) Content() string {
 	ib.lock.Lock()
 	defer ib.lock.Unlock()
-	return strings.Join(ib.content, "\n")
+
+	ret := &strings.Builder{}
+	for _, line := range ib.content {
+		ret.WriteString(string(line) + "\n")
+	}
+
+	return strings.TrimSuffix(ret.String(), "\n")
 }
 
 // Reset 清空缓冲内容，重置状态
@@ -79,7 +86,7 @@ func (ib *InputBox) Reset() {
 	ib.lock.Lock()
 	defer ib.lock.Unlock()
 
-	ib.content = []string{""}
+	ib.content = [][]rune{nil}
 	ib.rowCursor = 0
 	ib.colCursor = 0
 }
@@ -290,7 +297,7 @@ func (ib *InputBox) toLineEnd() {
 func (ib *InputBox) insert(r rune) {
 	before := ib.content[ib.rowCursor][:ib.colCursor]
 	after := ib.content[ib.rowCursor][ib.colCursor:]
-	ib.content[ib.rowCursor] = before + string(r) + after
+	ib.content[ib.rowCursor] = append(before, append([]rune{r}, after...)...)
 	ib.colCursor++
 
 	if ib.echoWriter != nil {
@@ -304,7 +311,7 @@ func (ib *InputBox) insertNewLine() {
 	ib.content[ib.rowCursor] = ib.content[ib.rowCursor][:ib.colCursor]
 	beforeLines := ib.content[:ib.rowCursor+1]
 	afterLines := ib.content[ib.rowCursor+1:]
-	ib.content = append(beforeLines, append([]string{newLine}, afterLines...)...)
+	ib.content = append(beforeLines, append([][]rune{newLine}, afterLines...)...)
 
 	ib.rowCursor++
 	ib.colCursor = 0
@@ -325,7 +332,7 @@ func (ib *InputBox) backspace() {
 		return
 	}
 	line := ib.content[ib.rowCursor]
-	line = line[:ib.colCursor-1] + line[ib.colCursor:]
+	line = append(line[:ib.colCursor-1], slices.Clone(line[ib.colCursor:])...)
 	ib.content[ib.rowCursor] = line
 	ib.colCursor--
 
@@ -341,7 +348,7 @@ func (ib *InputBox) delete() {
 		return
 	}
 
-	line = line[:ib.colCursor] + line[ib.colCursor+1:]
+	line = append(line[:ib.colCursor], slices.Clone(line[ib.colCursor+1:])...)
 	ib.content[ib.rowCursor] = line
 
 	if ib.echoWriter != nil {
