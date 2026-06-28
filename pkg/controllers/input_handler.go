@@ -9,16 +9,16 @@ import (
 	"github.com/charmbracelet/x/ansi/parser"
 )
 
-// InputMode 输入模式
-type InputMode uint32
+// InputState 输入模式
+type InputState uint32
 
 const (
-	// WriteShellInput 输入到 shell
-	WriteShellInput InputMode = iota
-	// WriteAgentInput 输入到 Agent
-	WriteAgentInput
-	// WaitForAgentOutput 等待 Agent 输出（忽略除中止操作外的任何输入）
-	WaitForAgentOutput
+	// InputToShell 输入到 shell
+	InputToShell InputState = iota
+	// InputToAgent 输入到 Agent
+	InputToAgent
+	// InputInterruptAgent 输入中断 Agent
+	InputInterruptAgent
 )
 
 // InputHandler 返回作为输入处理器的控制器
@@ -36,7 +36,7 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 	ctl.inputLock.Lock()
 	defer ctl.inputLock.Unlock()
 
-	curMode := ctl.curInputMode
+	curMode := ctl.inputState
 	buff := make([]byte, 0, len(p))
 	for i, c := range p {
 		ctl.inputParser.Advance(c)
@@ -46,9 +46,9 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 			continue
 		}
 
-		if curMode != ctl.curInputMode {
+		if curMode != ctl.inputState {
 			// 切换了模式，丢弃缓冲区
-			curMode = ctl.curInputMode
+			curMode = ctl.inputState
 			buff = buff[:0]
 			continue
 		}
@@ -71,16 +71,16 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 
 // writeUpstream 写输入到上游
 func (ctl *InputHandler) writeUpstream(p []byte) (n int, err error) {
-	switch ctl.curInputMode {
-	case WriteShellInput:
+	switch ctl.inputState {
+	case InputToShell:
 		return ctl.ptmx.Write(p)
-	case WriteAgentInput:
+	case InputToAgent:
 		return ctl.agentInputBox.Write(p)
-	case WaitForAgentOutput:
+	case InputInterruptAgent:
 		// 此时没有上游，忽略输入
 		return len(p), nil
 	default:
-		return 0, fmt.Errorf("unknown input mode: %d", ctl.curInputMode)
+		return 0, fmt.Errorf("unknown input mode: %d", ctl.inputState)
 	}
 }
 
@@ -95,14 +95,14 @@ func (ctl *InputHandler) ParseHandler() ansi.Handler {
 // handleExecute 处理控制字符
 func (ctl *InputHandler) handleExecute(b byte) {
 	switch {
-	case b == '\r' && ctl.curInputMode == WriteAgentInput:
+	case b == '\r' && ctl.inputState == InputToAgent:
 		// Enter 提交 Prompt 到 Agent
 
 		content := ctl.agentInputBox.Content()
 		ctl.agentInputBox.Reset()
 
 		ctl.agentInputBox.Deactivate()
-		ctl.curInputMode = WaitForAgentOutput
+		ctl.inputState = InputInterruptAgent
 
 		// 发送指令给 Agent
 		go func() {
@@ -116,19 +116,19 @@ func (ctl *InputHandler) handleExecute(b byte) {
 			}
 
 			ctl.inputLock.Lock()
-			ctl.curInputMode = WriteAgentInput
+			ctl.inputState = InputToAgent
 			ctl.agentInputBox.Activate()
 			ctl.inputLock.Unlock()
 		}()
 
-	case b == '\x03' && ctl.curInputMode == WaitForAgentOutput:
+	case b == '\x03' && ctl.inputState == InputInterruptAgent:
 		// Ctrl+C 中断 Agent
 		if err := ctl.agent.Cancel(); err != nil {
 			ctl.logger.Error(err, "cancel agent error")
 		}
 
-	case b == '\x03' && ctl.curInputMode == WriteAgentInput:
-		ctl.curInputMode = WriteShellInput
+	case b == '\x03' && ctl.inputState == InputToAgent:
+		ctl.inputState = InputToShell
 		ctl.agentInputBox.Deactivate()
 		ctl.agentInputBox.Reset()
 	}
@@ -138,12 +138,12 @@ func (ctl *InputHandler) handleExecute(b byte) {
 func (ctl *InputHandler) handleCSI(cmd ansi.Cmd, _ ansi.Params) {
 	// Shift + Tab 切换输入模式
 	if cmd.Final() == 'Z' {
-		switch ctl.curInputMode {
-		case WriteShellInput:
-			ctl.curInputMode = WriteAgentInput
+		switch ctl.inputState {
+		case InputToShell:
+			ctl.inputState = InputToAgent
 			ctl.agentInputBox.Activate()
-		case WriteAgentInput:
-			ctl.curInputMode = WriteShellInput
+		case InputToAgent:
+			ctl.inputState = InputToShell
 			ctl.agentInputBox.Deactivate()
 			ctl.agentInputBox.Reset()
 		default:

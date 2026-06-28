@@ -201,6 +201,7 @@ func NewCommand(name string) *cobra.Command {
 func run(ctx context.Context, opts Options) error {
 	globalOpts := GlobalOptionsFromContext(ctx)
 	cfg := configs.ConfigFromContext(ctx)
+	logger := logr.FromContextOrDiscard(ctx)
 
 	// 确定默认模型
 	m := cfg.DefaultModels
@@ -215,22 +216,23 @@ func run(ctx context.Context, opts Options) error {
 	}
 
 	// 确定日志输出目录
-	logDir := ""
+	traceID := fmt.Sprintf("%x", rand.Uint64())
+	logDir := filepath.Join(globalOpts.Home, "logs", traceID)
+	logger.Info(fmt.Sprintf("log dir: %s", logDir))
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return fmt.Errorf("create trace log directory %q error: %w", logDir, err)
+	}
 	if globalOpts.Debug {
-		traceID := fmt.Sprintf("%x", rand.Uint64())
-		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] trace id: %s\n", traceID)
-		logDir = filepath.Join(globalOpts.Home, "logs", traceID)
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return fmt.Errorf("create trace log directory %q error: %w", logDir, err)
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] trace id: %s, log: %s\n", traceID, logDir)
 	}
 
 	// 创建控制器和 Agent
 	ctl, err := controllers.New(controllers.Options{
-		Command:     opts.Shell,
-		Args:        nil,
-		Env:         nil,
-		TraceLogDir: logDir,
+		Command: opts.Shell,
+		Args:    nil,
+		Env:     nil,
+		TraceIO: globalOpts.Debug,
+		LogDir:  logDir,
 		Agent: agents.NewGoshAgent(agents.GoshAgentOptions{
 			ModelProviders:   cfg.ModelProviders,
 			DefaultModels:    m,

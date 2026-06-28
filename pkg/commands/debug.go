@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -33,46 +35,82 @@ func newDebugParseANSICommand() *cobra.Command {
 		Use:   "parse-ansi",
 		Short: i18n.T(MsgCmdShortDescDebugParseANSI),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parser := ansi.NewParser()
-			parser.SetHandler(ansi.Handler{
+			ctx := cmd.Context()
+			logger := logr.FromContextOrDiscard(ctx)
+
+			logSuffix := "\r\n"
+			if logger.V(1).Enabled() {
+				logSuffix = "  "
+			}
+			startTime := time.Now()
+
+			p := ansi.NewParser()
+
+			lastPrintTime := 0
+			var printBuff []rune
+			p.SetHandler(ansi.Handler{
 				Print: func(r rune) {
-					fmt.Printf("[Print] %q", r)
+					printTime := int(time.Since(startTime) / time.Second)
+					if len(printBuff) > 0 {
+						if printTime == lastPrintTime && len(printBuff) < 80 {
+							// 同行追加
+							printBuff = append(printBuff, r)
+							fmt.Printf("\x1b[A%04d  [Print] %q%s", printTime, string(printBuff), logSuffix)
+							return
+						}
+						printBuff = nil
+					}
+
+					printBuff = append(printBuff, r)
+					lastPrintTime = printTime
+					fmt.Printf("%04d  [Print] %q%s", printTime, r, logSuffix)
 				},
 				Execute: func(b byte) {
-					fmt.Printf("[Execute] %q", b)
+					printBuff = nil
+					fmt.Printf("%04d  [Execute] %q%s", time.Since(startTime)/time.Second, b, logSuffix)
 				},
 				HandleCsi: func(cmd ansi.Cmd, params ansi.Params) {
+					printBuff = nil
 					fmt.Printf(
-						"[CSI] prefix=%q intermediate=%q final=%q params=%d",
-						cmd.Prefix(), cmd.Intermediate(), cmd.Final(), params,
+						"%04d  [CSI] prefix=%q intermediate=%q final=%q params=%d%s",
+						time.Since(startTime)/time.Second,
+						cmd.Prefix(), cmd.Intermediate(), cmd.Final(), params, logSuffix,
 					)
 				},
 				HandleEsc: func(cmd ansi.Cmd) {
+					printBuff = nil
 					fmt.Printf(
-						"[ESC] prefix=%q intermediate=%q final=%q",
-						cmd.Prefix(), cmd.Intermediate(), cmd.Final(),
+						"%04d  [ESC] prefix=%q intermediate=%q final=%q%s",
+						time.Since(startTime)/time.Second,
+						cmd.Prefix(), cmd.Intermediate(), cmd.Final(), logSuffix,
 					)
 				},
 				HandleDcs: func(cmd ansi.Cmd, params ansi.Params, data []byte) {
+					printBuff = nil
 					fmt.Printf(
-						"[DCS] prefix=%q intermediate=%q final=%q params=%d data=%q",
-						cmd.Prefix(), cmd.Intermediate(), cmd.Final(), params, string(data),
+						"%04d  [DCS] prefix=%q intermediate=%q final=%q params=%d data=%q%s",
+						time.Since(startTime)/time.Second,
+						cmd.Prefix(), cmd.Intermediate(), cmd.Final(), params, string(data), logSuffix,
 					)
 				},
 				HandleOsc: func(cmd int, data []byte) {
+					printBuff = nil
 					fmt.Printf(
-						"[OSC] cmd=%d data=%q",
-						cmd, string(data),
+						"%04d  [OSC] cmd=%d data=%q%s",
+						time.Since(startTime)/time.Second, cmd, string(data), logSuffix,
 					)
 				},
 				HandlePm: func(data []byte) {
-					fmt.Printf("[PM] data=%q", string(data))
+					printBuff = nil
+					fmt.Printf("%04d  [PM] data=%q%s", time.Since(startTime)/time.Second, string(data), logSuffix)
 				},
 				HandleApc: func(data []byte) {
-					fmt.Printf("[APC] data=%q", string(data))
+					printBuff = nil
+					fmt.Printf("%04d  [APC] data=%q%s", time.Since(startTime)/time.Second, string(data), logSuffix)
 				},
 				HandleSos: func(data []byte) {
-					fmt.Printf("[SOS] data=%q", string(data))
+					printBuff = nil
+					fmt.Printf("%04d  [SOS] data=%q%s", time.Since(startTime)/time.Second, string(data), logSuffix)
 				},
 			})
 
@@ -97,16 +135,16 @@ func newDebugParseANSICommand() *cobra.Command {
 				}
 
 				for _, b := range buff[:n] {
-					parser.Advance(b)
-					fmt.Printf(" (%s)\r\n", parser.StateName())
+					p.Advance(b)
+					if logger.V(1).Enabled() {
+						fmt.Printf("(%s)\r\n", p.StateName())
+					}
 					switch b {
 					case '\x03', '\x04':
 						return nil
 					}
 				}
 			}
-
-			return nil
 		},
 	}
 	cmd.AddCommand()

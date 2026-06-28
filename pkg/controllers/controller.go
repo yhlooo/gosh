@@ -30,8 +30,10 @@ type Options struct {
 	// shell 额外环境变量
 	Env []string
 
-	// 跟踪日志输出目录
-	TraceLogDir string
+	// 日志输出目录
+	LogDir string
+	// 跟踪输入输出
+	TraceIO bool
 
 	// Agent
 	Agent agents.Agent
@@ -73,14 +75,16 @@ type Controller struct {
 	inputParser  *ansi.Parser
 	outputParser *ansi.Parser
 
-	curInputMode  InputMode
+	inputState    InputState
 	agentInputBox *ui.InputBox
+
+	outputState OutputState
+	outputLog   *os.File
 }
 
 const (
-	TraceInputLogFile  = "input.log"
+	OutputLogFile      = "output.log"
 	TraceInputRawFile  = "input.raw"
-	TraceOutputLogFile = "output.log"
 	TraceOutputRawFile = "output.raw"
 )
 
@@ -152,8 +156,8 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	ctl.outputParser.SetHandler(ctl.OutputHandler().ParseHandler())
 	ptyOutW := io.Writer(ctl.OutputHandler())
 
-	if ctl.opts.TraceLogDir != "" {
-		inRawFilePath := filepath.Join(ctl.opts.TraceLogDir, TraceInputRawFile)
+	if ctl.opts.TraceIO {
+		inRawFilePath := filepath.Join(ctl.opts.LogDir, TraceInputRawFile)
 		inRawFile, err := os.OpenFile(inRawFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
 			return fmt.Errorf("open input trace file %q error: %w", inRawFilePath, err)
@@ -161,7 +165,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		defer func() { _ = inRawFile.Close() }()
 		ptyInW = io.MultiWriter(ptyInW, inRawFile)
 
-		outRawFilePath := filepath.Join(ctl.opts.TraceLogDir, TraceOutputRawFile)
+		outRawFilePath := filepath.Join(ctl.opts.LogDir, TraceOutputRawFile)
 		outRawFile, err := os.OpenFile(outRawFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
 			return fmt.Errorf("open output trace file %q error: %w", inRawFilePath, err)
@@ -169,6 +173,14 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		defer func() { _ = outRawFile.Close() }()
 		ptyOutW = io.MultiWriter(ptyOutW, outRawFile)
 	}
+
+	// 打开输出日志文件
+	outputLogPath := filepath.Join(ctl.opts.LogDir, OutputLogFile)
+	ctl.outputLog, err = os.OpenFile(outputLogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("open output log file %q error: %w", outputLogPath, err)
+	}
+	defer func() { _ = ctl.outputLog.Close() }()
 
 	// 设置输入流为 raw 格式
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
