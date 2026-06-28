@@ -17,6 +17,7 @@ import (
 	"github.com/go-logr/logr"
 	"golang.org/x/term"
 
+	"github.com/yhlooo/gosh/pkg/agents"
 	"github.com/yhlooo/gosh/pkg/iotrace"
 	"github.com/yhlooo/gosh/pkg/ui"
 )
@@ -32,6 +33,9 @@ type Options struct {
 
 	// 跟踪日志输出目录
 	TraceLogDir string
+
+	// Agent
+	Agent agents.Agent
 }
 
 // Validate 校验选项
@@ -48,7 +52,8 @@ func New(opts Options) (*Controller, error) {
 		return nil, err
 	}
 	return &Controller{
-		opts: opts,
+		opts:  opts,
+		agent: opts.Agent,
 	}, nil
 }
 
@@ -59,7 +64,9 @@ type Controller struct {
 	started   atomic.Int32
 	inputLock sync.Mutex
 
+	ctx            context.Context
 	logger         logr.Logger
+	agent          agents.Agent
 	cmd            *exec.Cmd
 	ptmx           *os.File
 	output         *os.File
@@ -86,6 +93,15 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	started := ctl.started.Add(1)
 	if started > 1 {
 		return fmt.Errorf("%w: controller already started", ErrAlreadyStarted)
+	}
+
+	ctl.ctx = ctx
+
+	// 初始化 Agent
+	if err := ctl.agent.Initialize(ctx, agents.Options{
+		ChatOutputStreamHandler: ctl.agentOutputHandler(),
+	}); err != nil {
+		return fmt.Errorf("initialize agent error: %w", err)
 	}
 
 	// 构造执行 shell 命令
@@ -160,6 +176,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	}
 	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
 
+	// 转发 shell 输入输出
 	go func() { _, _ = io.Copy(ptyInW, os.Stdin) }()
 	_, _ = io.Copy(ptyOutW, ctl.ptmx)
 

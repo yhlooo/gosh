@@ -10,9 +10,24 @@ commands.CmdShortDesc:
 commands.CmdShortDescVersion:
     hash: sha1-79526ef3b57592a549aa6b35ce7596080ebf5668
     other: 打印版本信息
+commands.GlobalOptsDebugDesc:
+    hash: sha1-fffd51aa2f68781fd913fb147ffadd4b1101c8a5
+    other: 以调试模式运行
 commands.GlobalOptsVerbosityDesc:
     hash: sha1-d99c2b79a5d6e3a42f969d5df2dd282899e7e5fd
-    other: 日志级别 (0, 1, 或 2)
+    other: 日志级别 (0, 1 或 2)
+commands.OptsModelDesc:
+    hash: sha1-9e5c8d0ed3cce1ddc4cbfff57fea9e7d366bb21c
+    other: 当前会话使用的主模型
+commands.OptsReasoningLevelDesc:
+    hash: sha1-ee1e8e1cf77fa6f071775e104d89d8d771b3b9d5
+    other: 思考级别 (0, 1 或 2)
+commands.OptsShellDesc:
+    hash: sha1-bdc1fd5d3c0f3dcfd55d010426e61bf9451e680d
+    other: Shell
+commands.OptsVisionModelDesc:
+    hash: sha1-f4e06966166e382f73a317bd149624b959f482c2
+    other: 当前会话使用的视觉理解模型
 commands.VersionOptsOutputFormatDesc:
     hash: sha1-43a90ee888e64bc5efd1f81974af5fafee8ab9a6
     other: 输出格式 (json, yaml)

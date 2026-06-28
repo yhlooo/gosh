@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/danielgatis/go-vte"
 )
@@ -11,10 +12,12 @@ import (
 type InputMode uint32
 
 const (
-	// InputShell 输入直传给 shell
-	InputShell InputMode = iota
-	// InputAgent 输入给 Agent
-	InputAgent
+	// WriteShellInput 输入到 shell
+	WriteShellInput InputMode = iota
+	// WriteAgentInput 输入到 Agent
+	WriteAgentInput
+	// WaitForAgentOutput 等待 Agent 输出（忽略除中止操作外的任何输入）
+	WaitForAgentOutput
 )
 
 // InputHandler 返回作为输入处理器的控制器
@@ -72,10 +75,13 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 // writeUpstream 写输入到上游
 func (ctl *InputHandler) writeUpstream(p []byte) (n int, err error) {
 	switch ctl.curInputMode {
-	case InputShell:
+	case WriteShellInput:
 		return ctl.ptmx.Write(p)
-	case InputAgent:
+	case WriteAgentInput:
 		return ctl.agentInputBox.Write(p)
+	case WaitForAgentOutput:
+		// 此时没有上游，忽略输入
+		return len(p), nil
 	default:
 		return 0, fmt.Errorf("unknown input mode: %d", ctl.curInputMode)
 	}
@@ -86,12 +92,37 @@ func (ctl *InputHandler) Print(r rune) {}
 
 // Execute 处理控制字符
 func (ctl *InputHandler) Execute(b byte) {
-	if b == '\r' && ctl.curInputMode == InputAgent {
+	// Enter 提交 Prompt 到 Agent
+	if b == '\r' && ctl.curInputMode == WriteAgentInput {
 		content := ctl.agentInputBox.Content()
-		ctl.logger.Info(fmt.Sprintf("send to agent: %q", content))
 		ctl.agentInputBox.Reset()
 
-		// TODO: 发送给 Agent
+		ctl.agentInputBox.Deactivate()
+		ctl.curInputMode = WaitForAgentOutput
+
+		// 发送指令给 Agent
+		go func() {
+			ctl.logger.Info(fmt.Sprintf("send to agent: %q", content))
+			if err := ctl.agent.Chat(ctl.ctx, content); err != nil {
+				ctl.logger.Error(err, "chat with agent error")
+				_, _ = ctl.output.Write([]byte(fmt.Sprintf(
+					"\r\n\x1b[31m%s\x1b[0m",
+					strings.ReplaceAll(err.Error(), "\n", "\r\n"),
+				)))
+			}
+
+			ctl.inputLock.Lock()
+			ctl.curInputMode = WriteAgentInput
+			ctl.agentInputBox.Activate()
+			ctl.inputLock.Unlock()
+		}()
+	}
+
+	// Ctrl+C 中断 Agent
+	if b == '\x03' && ctl.curInputMode == WaitForAgentOutput {
+		if err := ctl.agent.Cancel(); err != nil {
+			ctl.logger.Error(err, "cancel agent error")
+		}
 	}
 }
 
@@ -112,13 +143,14 @@ func (ctl *InputHandler) CsiDispatch(params [][]uint16, intermediates []byte, ig
 	// Shift + Tab 切换输入模式
 	if !ignore && r == 'Z' && len(params) == 0 && len(intermediates) == 0 {
 		switch ctl.curInputMode {
-		case InputShell:
-			ctl.curInputMode = InputAgent
+		case WriteShellInput:
+			ctl.curInputMode = WriteAgentInput
 			ctl.agentInputBox.Activate()
-		case InputAgent:
-			ctl.curInputMode = InputShell
+		case WriteAgentInput:
+			ctl.curInputMode = WriteShellInput
 			ctl.agentInputBox.Deactivate()
 			ctl.agentInputBox.Reset()
+		default:
 		}
 	}
 

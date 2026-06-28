@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/pflag"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/yhlooo/gosh/pkg/agents"
+	"github.com/yhlooo/gosh/pkg/configs"
 	"github.com/yhlooo/gosh/pkg/controllers"
 	"github.com/yhlooo/gosh/pkg/i18n"
 	"github.com/yhlooo/gosh/pkg/version"
@@ -80,18 +82,27 @@ func NewOptions() Options {
 		defaultShell = "bash"
 	}
 	return Options{
-		Shell: defaultShell,
+		Shell:          defaultShell,
+		Model:          "",
+		VisionModel:    "",
+		ReasoningLevel: -1,
 	}
 }
 
 // Options 运行选项
 type Options struct {
-	Shell string
+	Shell          string
+	Model          string
+	VisionModel    string
+	ReasoningLevel int
 }
 
 // AddPFlags 将选项绑定到命令行参数
 func (o *Options) AddPFlags(fs *pflag.FlagSet) {
 	fs.StringVarP(&o.Shell, "shell", "s", o.Shell, i18n.T(MsgOptsShellDesc))
+	fs.StringVarP(&o.Model, "model", "m", o.Model, i18n.T(MsgOptsModelDesc))
+	fs.StringVar(&o.VisionModel, "vision-model", o.VisionModel, i18n.T(MsgOptsVisionModelDesc))
+	fs.IntVarP(&o.ReasoningLevel, "reasoning-level", "r", o.ReasoningLevel, i18n.T(MsgOptsReasoningLevelDesc))
 }
 
 // NewCommand 创建根命令
@@ -142,10 +153,17 @@ func NewCommand(name string) *cobra.Command {
 			logger := logrusr.New(logrusLogger)
 			ctx = logr.NewContext(ctx, logger)
 
-			// 设置本地化器
-			ctx = i18n.ContextWithLocalizer(ctx, i18n.NewLocalizer(i18n.GetEnvLanguage()))
+			// 加载配置
+			cfgPath := filepath.Join(globalOpts.Home, "gosh.json")
+			cfg, err := configs.LoadConfig(cfgPath)
+			if err != nil {
+				return fmt.Errorf("load config %q error: %w", cfgPath, err)
+			}
+			ctx = configs.ContextWithConfig(ctx, cfg, cfgPath)
 
-			var err error
+			// 设置本地化器
+			ctx = i18n.ContextWithLocalizer(ctx, i18n.NewLocalizer(cfg.Language, i18n.GetEnvLanguage()))
+
 			keylog, err = setKeyLog()
 			if err != nil {
 				return fmt.Errorf("set tls key log error: %w", err)
@@ -181,7 +199,21 @@ func NewCommand(name string) *cobra.Command {
 // run 运行
 func run(ctx context.Context, opts Options) error {
 	globalOpts := GlobalOptionsFromContext(ctx)
+	cfg := configs.ConfigFromContext(ctx)
 
+	// 确定默认模型
+	m := cfg.DefaultModels
+	if opts.Model != "" {
+		m.Primary = opts.Model
+	}
+	if opts.VisionModel != "" {
+		m.Vision = opts.VisionModel
+	}
+	if opts.ReasoningLevel >= 0 {
+		m.ReasoningLevel = &opts.ReasoningLevel
+	}
+
+	// 确定日志输出目录
 	logDir := ""
 	if globalOpts.Debug {
 		traceID := fmt.Sprintf("%x", rand.Uint64())
@@ -192,11 +224,17 @@ func run(ctx context.Context, opts Options) error {
 		}
 	}
 
+	// 创建控制器和 Agent
 	ctl, err := controllers.New(controllers.Options{
 		Command:     opts.Shell,
 		Args:        nil,
 		Env:         nil,
 		TraceLogDir: logDir,
+		Agent: agents.NewGoshAgent(agents.GoshAgentOptions{
+			ModelProviders:   cfg.ModelProviders,
+			DefaultModels:    m,
+			MaxContextWindow: cfg.MaxContextWindow,
+		}),
 	})
 	if err != nil {
 		return err
