@@ -318,10 +318,10 @@ func (ib *InputBox) insertNewLine() {
 
 	if ib.echoWriter != nil {
 		if ib.rowCursor == len(ib.content)-1 {
-			_, _ = ib.echoWriter.Write([]byte(fmt.Sprintf("\x1b[K\r\n> %s\r> ", newLine)))
+			_, _ = ib.echoWriter.Write([]byte(fmt.Sprintf("\x1b[K\r\n> %s\r> ", string(newLine))))
 		} else {
 			followingLines := len(ib.content) - ib.rowCursor - 1
-			_, _ = ib.echoWriter.Write([]byte(fmt.Sprintf("\x1b[K\x1b[%dB\r\n\x1b[%dA\x1b[L> %s\r> ", followingLines, followingLines, newLine)))
+			_, _ = ib.echoWriter.Write([]byte(fmt.Sprintf("\x1b[K\x1b[%dB\r\n\x1b[%dA\x1b[L> %s\r> ", followingLines, followingLines, string(newLine))))
 		}
 	}
 }
