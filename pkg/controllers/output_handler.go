@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/ansi/parser"
 )
 
 // OutputState 输出状态
@@ -38,10 +39,24 @@ func (ctl *OutputHandler) Write(p []byte) (n int, err error) {
 	ctl.outputLock.Lock()
 	defer ctl.outputLock.Unlock()
 
+	lastGround := 0
 	for i, c := range p {
 		ctl.outputParser.Advance(c)
+
 		if _, err := ctl.output.Write([]byte{c}); err != nil {
 			return i, err
+		}
+		if ctl.outputParser.State() == parser.GroundState {
+			switch ctl.outputState {
+			case OutputOthers:
+			case OutputPrompt:
+				ctl.promptBuff.Write(p[lastGround : i+1])
+			case OutputCommand:
+				_, _ = ctl.commandBuff.Write(p[lastGround : i+1])
+			case OutputCommandExec:
+				_, _ = ctl.outputLog.Write(p[lastGround : i+1])
+			}
+			lastGround = i + 1
 		}
 	}
 
@@ -51,9 +66,6 @@ func (ctl *OutputHandler) Write(p []byte) (n int, err error) {
 // ParseHandler 返回解析 ANSI 序列处理器
 func (ctl *OutputHandler) ParseHandler() ansi.Handler {
 	return ansi.Handler{
-		Print: func(r rune) {
-			_, _ = ctl.outputLog.WriteString(string(r))
-		},
 		HandleOsc: ctl.handleOSC,
 	}
 }
@@ -72,15 +84,17 @@ func (ctl *OutputHandler) handleOSC(cmd int, data []byte) {
 		case "133;A":
 			// 提示符开始
 			ctl.outputState = OutputPrompt
-			_, _ = ctl.outputLog.WriteString("\n\n---------------- Prompt Start ----------------\n\n")
+			ctl.promptBuff.Reset()
 		case "133;B":
 			// 命令开始
 			ctl.outputState = OutputCommand
-			_, _ = ctl.outputLog.WriteString("\n\n---------------- Command Start ----------------\n\n")
+			ctl.commandBuff.ResetState()
 		case "133;C":
 			// 命令开始执行
 			ctl.outputState = OutputCommandExec
-			_, _ = ctl.outputLog.WriteString("\n\n---------------- Command Executed ----------------\n\n")
+			_, _ = ctl.outputLog.WriteString("\n---------------- Command Start ----------------\n")
+			_, _ = ctl.outputLog.WriteString(ctl.commandBuff.String())
+			_, _ = ctl.outputLog.WriteString("\n---------------- Command Executed ----------------\n")
 		case "133;D":
 			// 命令执行结束
 			ctl.outputState = OutputOthers
@@ -90,7 +104,7 @@ func (ctl *OutputHandler) handleOSC(cmd int, data []byte) {
 				exitCode, _ = strconv.Atoi(dataDivided[2])
 			}
 			_, _ = ctl.outputLog.WriteString(fmt.Sprintf(
-				"\n\n---------------- Command Finished (%d) ----------------\n\n",
+				"\n---------------- Command Finished (%d) ----------------\n",
 				exitCode,
 			))
 		}

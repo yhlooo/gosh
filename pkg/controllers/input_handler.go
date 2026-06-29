@@ -131,6 +131,8 @@ func (ctl *InputHandler) handleExecute(b byte) {
 		ctl.inputState = InputToShell
 		ctl.agentInputBox.Deactivate()
 		ctl.agentInputBox.Reset()
+		_, _ = ctl.output.Write(ctl.promptBuff.Bytes())
+		_, _ = ctl.output.Write(ctl.commandBuff.RecordedData())
 	}
 }
 
@@ -146,6 +148,8 @@ func (ctl *InputHandler) handleCSI(cmd ansi.Cmd, _ ansi.Params) {
 			ctl.inputState = InputToShell
 			ctl.agentInputBox.Deactivate()
 			ctl.agentInputBox.Reset()
+			_, _ = ctl.output.Write(ctl.promptBuff.Bytes())
+			_, _ = ctl.output.Write(ctl.commandBuff.RecordedData())
 		default:
 		}
 	}

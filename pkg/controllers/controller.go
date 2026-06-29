@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
+	headlessterm "github.com/danielgatis/go-headless-term"
 	"github.com/go-logr/logr"
 	"golang.org/x/term"
 
@@ -80,6 +82,8 @@ type Controller struct {
 
 	outputState OutputState
 	outputLog   *os.File
+	commandBuff *headlessterm.Terminal
+	promptBuff  *bytes.Buffer
 }
 
 const (
@@ -181,6 +185,9 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		return fmt.Errorf("open output log file %q error: %w", outputLogPath, err)
 	}
 	defer func() { _ = ctl.outputLog.Close() }()
+
+	ctl.commandBuff = headlessterm.New()
+	ctl.promptBuff = &bytes.Buffer{}
 
 	// 设置输入流为 raw 格式
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
