@@ -15,12 +15,11 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
-	headlessterm "github.com/danielgatis/go-headless-term"
 	"github.com/go-logr/logr"
-	"golang.org/x/term"
+	goterm "golang.org/x/term"
 
 	"github.com/yhlooo/gosh/pkg/agents"
-	"github.com/yhlooo/gosh/pkg/ui"
+	"github.com/yhlooo/gosh/pkg/term"
 )
 
 // Options 运行选项
@@ -32,8 +31,8 @@ type Options struct {
 	// shell 额外环境变量
 	Env []string
 
-	// 日志输出目录
-	LogDir string
+	// 会话数据存储目录
+	SessionDir string
 	// 跟踪输入输出
 	TraceIO bool
 
@@ -64,7 +63,9 @@ func New(opts Options) (*Controller, error) {
 type Controller struct {
 	opts Options
 
-	started    atomic.Int32
+	started atomic.Int32
+
+	// TODO: 输入操作里有些逻辑会操作输出相关对象，输出操作里也有操作输入相关对象，分两个锁不一定能锁住
 	inputLock  sync.Mutex
 	outputLock sync.Mutex
 
@@ -78,16 +79,15 @@ type Controller struct {
 	outputParser *ansi.Parser
 
 	inputState    InputState
-	agentInputBox *ui.InputBox
+	inputBuff     *bytes.Buffer
+	agentInputBox *term.InputBox
 
-	outputState OutputState
-	outputLog   *os.File
-	commandBuff *headlessterm.Terminal
-	promptBuff  *bytes.Buffer
+	commandCollector *term.CommandCollector
 }
 
 const (
-	OutputLogFile      = "output.log"
+	CommandLogFile     = "commands.jsonl"
+	ExecOutputRawFile  = "exec_output.raw"
 	TraceInputRawFile  = "input.raw"
 	TraceOutputRawFile = "output.raw"
 )
@@ -106,8 +106,19 @@ func (ctl *Controller) Run(ctx context.Context) error {
 
 	ctl.ctx = ctx
 
+	var err error
+	ctl.commandCollector, err = term.NewCommandCollector(
+		filepath.Join(ctl.opts.SessionDir, CommandLogFile),
+		filepath.Join(ctl.opts.SessionDir, ExecOutputRawFile),
+	)
+	if err != nil {
+		return fmt.Errorf("create command collector error: %w", err)
+	}
+
+	ctl.inputBuff = &bytes.Buffer{}
+
 	// 初始化 Agent
-	if err := ctl.agent.Initialize(ctx, agents.Options{
+	if err = ctl.agent.Initialize(ctx, agents.Options{
 		ChatOutputStreamHandler: ctl.agentOutputHandler(),
 	}); err != nil {
 		return fmt.Errorf("initialize agent error: %w", err)
@@ -121,7 +132,6 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	}
 
 	// 设置输入输出流并启动 shell
-	var err error
 	ctl.ptmx, err = pty.Start(ctl.cmd)
 	if err != nil {
 		return fmt.Errorf("start %q error: %w", ctl.cmd.Args, err)
@@ -141,6 +151,8 @@ func (ctl *Controller) Run(ctx context.Context) error {
 			if err := pty.InheritSize(os.Stdin, ctl.ptmx); err != nil {
 				logger.Error(err, "resize pty error")
 			}
+			rows, cols, _ := pty.Getsize(os.Stdin)
+			ctl.commandCollector.Resize(rows, cols)
 		}
 	}()
 	winchCh <- syscall.SIGWINCH
@@ -150,7 +162,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	}()
 
 	ctl.output = os.Stdout
-	ctl.agentInputBox = ui.NewInputBox(ctl.output)
+	ctl.agentInputBox = term.NewInputBox(ctl.output)
 
 	ctl.inputParser = ansi.NewParser()
 	ctl.inputParser.SetHandler(ctl.InputHandler().ParseHandler())
@@ -161,7 +173,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	ptyOutW := io.Writer(ctl.OutputHandler())
 
 	if ctl.opts.TraceIO {
-		inRawFilePath := filepath.Join(ctl.opts.LogDir, TraceInputRawFile)
+		inRawFilePath := filepath.Join(ctl.opts.SessionDir, TraceInputRawFile)
 		inRawFile, err := os.OpenFile(inRawFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
 			return fmt.Errorf("open input trace file %q error: %w", inRawFilePath, err)
@@ -169,7 +181,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		defer func() { _ = inRawFile.Close() }()
 		ptyInW = io.MultiWriter(ptyInW, inRawFile)
 
-		outRawFilePath := filepath.Join(ctl.opts.LogDir, TraceOutputRawFile)
+		outRawFilePath := filepath.Join(ctl.opts.SessionDir, TraceOutputRawFile)
 		outRawFile, err := os.OpenFile(outRawFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
 			return fmt.Errorf("open output trace file %q error: %w", inRawFilePath, err)
@@ -178,23 +190,12 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		ptyOutW = io.MultiWriter(ptyOutW, outRawFile)
 	}
 
-	// 打开输出日志文件
-	outputLogPath := filepath.Join(ctl.opts.LogDir, OutputLogFile)
-	ctl.outputLog, err = os.OpenFile(outputLogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		return fmt.Errorf("open output log file %q error: %w", outputLogPath, err)
-	}
-	defer func() { _ = ctl.outputLog.Close() }()
-
-	ctl.commandBuff = headlessterm.New()
-	ctl.promptBuff = &bytes.Buffer{}
-
 	// 设置输入流为 raw 格式
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	oldState, err := goterm.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		return fmt.Errorf("set stdin raw error: %w", err)
 	}
-	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
+	defer func() { _ = goterm.Restore(int(os.Stdin.Fd()), oldState) }()
 
 	// 转发 shell 输入输出
 	go func() { _, _ = io.Copy(ptyInW, os.Stdin) }()

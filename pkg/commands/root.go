@@ -215,24 +215,25 @@ func run(ctx context.Context, opts Options) error {
 		m.ReasoningLevel = &opts.ReasoningLevel
 	}
 
-	// 确定日志输出目录
-	traceID := fmt.Sprintf("%x", rand.Uint64())
-	logDir := filepath.Join(globalOpts.Home, "logs", traceID)
-	logger.Info(fmt.Sprintf("log dir: %s", logDir))
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return fmt.Errorf("create trace log directory %q error: %w", logDir, err)
+	// 确定会话目录
+	sessID := fmt.Sprintf("%x", rand.Uint64())
+	sessDir := filepath.Join(globalOpts.Home, "sessions", sessID)
+	logger.Info(fmt.Sprintf("session dir: %s", sessDir))
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		return fmt.Errorf("create session directory %q error: %w", sessDir, err)
 	}
 	if globalOpts.Debug {
-		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] trace id: %s, log: %s\n", traceID, logDir)
+		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] session id: %s, dir: %s\n", sessID, sessDir)
 	}
+	_ = os.Setenv("GOSH_SESSION", sessID)
 
 	// 创建控制器和 Agent
 	ctl, err := controllers.New(controllers.Options{
-		Command: opts.Shell,
-		Args:    nil,
-		Env:     nil,
-		TraceIO: globalOpts.Debug,
-		LogDir:  logDir,
+		Command:    opts.Shell,
+		Args:       nil,
+		Env:        nil,
+		TraceIO:    globalOpts.Debug,
+		SessionDir: sessDir,
 		Agent: agents.NewGoshAgent(agents.GoshAgentOptions{
 			ModelProviders:   cfg.ModelProviders,
 			DefaultModels:    m,

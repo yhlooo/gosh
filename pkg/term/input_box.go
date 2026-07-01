@@ -1,4 +1,4 @@
-package ui
+package term
 
 import (
 	"fmt"
@@ -106,21 +106,21 @@ func (ib *InputBox) handlePrint(r rune) {
 // handleExecute 处理控制字符
 func (ib *InputBox) handleExecute(b byte) {
 	switch b {
-	case SOH: // 行首 Ctrl+A
+	case ansi.SOH: // 行首 Ctrl+A
 		ib.toLineStart()
-	case STX: // 左移 Ctrl+B
+	case ansi.STX: // 左移 Ctrl+B
 		ib.moveLeft(1)
-	case ENQ: // 行尾 Ctrl+E
+	case ansi.ENQ: // 行尾 Ctrl+E
 		ib.toLineEnd()
-	case ACK: // 右移 Ctrl+F
+	case ansi.ACK: // 右移 Ctrl+F
 		ib.moveRight(1)
-	case BS: // 退格 Ctrl+H
+	case ansi.BS: // 退格 Ctrl+H
 		ib.backspace()
-	case LF, CR: // 回车 Enter / Ctrl+M / Ctrl+J
+	case ansi.LF, ansi.CR: // 回车 Enter / Ctrl+M / Ctrl+J
 		ib.insertNewLine()
-	case HT: // 制表符 Tab / Ctrl+I
+	case ansi.HT: // 制表符 Tab / Ctrl+I
 		ib.insert('\t')
-	case DEL:
+	case ansi.DEL:
 		ib.backspace()
 	}
 }

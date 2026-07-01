@@ -37,31 +37,25 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 	defer ctl.inputLock.Unlock()
 
 	curMode := ctl.inputState
-	buff := make([]byte, 0, len(p))
 	for i, c := range p {
 		ctl.inputParser.Advance(c)
+
 		if ctl.inputParser.State() != parser.GroundState {
-			// 非 Ground 态，可能在输入切换模式序列，内容暂时缓冲
-			buff = append(buff, c)
+			ctl.inputBuff.WriteByte(c)
 			continue
 		}
 
 		if curMode != ctl.inputState {
 			// 切换了模式，丢弃缓冲区
 			curMode = ctl.inputState
-			buff = buff[:0]
+			ctl.inputBuff.Reset()
 			continue
 		}
 
 		// 回到 Ground 态，没有切换模式，把缓冲区刷掉
-		if len(buff) > 0 {
-			if _, err := ctl.writeUpstream(buff); err != nil {
-				return i, err
-			}
-			buff = buff[:0]
-		}
-
-		if _, err := ctl.writeUpstream([]byte{c}); err != nil {
+		_, err = ctl.writeUpstream(append(ctl.inputBuff.Bytes(), c))
+		ctl.inputBuff.Reset()
+		if err != nil {
 			return i, err
 		}
 	}
@@ -131,8 +125,7 @@ func (ctl *InputHandler) handleExecute(b byte) {
 		ctl.inputState = InputToShell
 		ctl.agentInputBox.Deactivate()
 		ctl.agentInputBox.Reset()
-		_, _ = ctl.output.Write(ctl.promptBuff.Bytes())
-		_, _ = ctl.output.Write(ctl.commandBuff.RecordedData())
+		_, _ = ctl.output.Write(ctl.commandCollector.CurrentPromptAndCommand())
 	}
 }
 
@@ -148,8 +141,7 @@ func (ctl *InputHandler) handleCSI(cmd ansi.Cmd, _ ansi.Params) {
 			ctl.inputState = InputToShell
 			ctl.agentInputBox.Deactivate()
 			ctl.agentInputBox.Reset()
-			_, _ = ctl.output.Write(ctl.promptBuff.Bytes())
-			_, _ = ctl.output.Write(ctl.commandBuff.RecordedData())
+			_, _ = ctl.output.Write(ctl.commandCollector.CurrentPromptAndCommand())
 		default:
 		}
 	}
