@@ -2,6 +2,7 @@ package term
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -36,6 +37,7 @@ func NewCommandCollector(logPath, execOutPath string) (*CommandCollector, error)
 		return nil, fmt.Errorf("open log file %q error: %w", logPath, err)
 	}
 	cc.cmdLogFile = logFile
+	cc.cmdLogEncoder = json.NewEncoder(logFile)
 
 	// 打开命令执行输出文件
 	execOutFile, err := os.OpenFile(execOutPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
@@ -68,13 +70,15 @@ type CommandCollector struct {
 
 	closed bool
 	state  OutputState
+	curCmd *CommandRecord
 
-	parser      *ansi.Parser
-	buff        *bytes.Buffer
-	promptBuff  *bytes.Buffer
-	cmdBuff     *headlessterm.Terminal
-	execOutFile *os.File
-	cmdLogFile  *os.File
+	parser        *ansi.Parser
+	buff          *bytes.Buffer
+	promptBuff    *bytes.Buffer
+	cmdBuff       *headlessterm.Terminal
+	execOutFile   *os.File
+	cmdLogEncoder *json.Encoder
+	cmdLogFile    *os.File
 }
 
 var _ io.Writer = (*CommandCollector)(nil)
@@ -190,9 +194,17 @@ func (cc *CommandCollector) handleOSC(cmd int, data []byte) {
 		case "133;C":
 			// 命令开始执行
 			cc.state = OutputCommandExec
-			_, _ = cc.execOutFile.WriteString("\n---------------- Command Start ----------------\n")
+
+			_, _ = cc.execOutFile.WriteString("-------- CommandLine --------\n")
 			_, _ = cc.execOutFile.WriteString(cc.cmdBuff.String())
-			_, _ = cc.execOutFile.WriteString("\n---------------- Command Executed ----------------\n")
+			_, _ = cc.execOutFile.WriteString("\n-------- ExecOutput --------\n")
+
+			stat, _ := cc.execOutFile.Stat()
+			cc.curCmd = &CommandRecord{
+				CommandLine:     cc.cmdBuff.String(),
+				ExecOutputStart: stat.Size(),
+				ExecOutputEnd:   stat.Size(),
+			}
 		case "133;D":
 			// 命令执行结束
 			cc.state = OutputOthers
@@ -201,10 +213,28 @@ func (cc *CommandCollector) handleOSC(cmd int, data []byte) {
 			if len(dataDivided) >= 3 {
 				exitCode, _ = strconv.Atoi(dataDivided[2])
 			}
-			_, _ = cc.execOutFile.WriteString(fmt.Sprintf(
-				"\n---------------- Command Finished (%d) ----------------\n",
-				exitCode,
-			))
+
+			if cc.curCmd != nil {
+				curCmd := cc.curCmd
+				cc.curCmd = nil
+				stat, _ := cc.execOutFile.Stat()
+				curCmd.ExitCode = exitCode
+				curCmd.ExecOutputEnd = stat.Size()
+				_ = cc.cmdLogEncoder.Encode(curCmd)
+			}
+			_, _ = cc.execOutFile.WriteString(fmt.Sprintf("\n-------- Exit(%d) --------\n", exitCode))
 		}
 	}
+}
+
+// CommandRecord 命令执行记录
+type CommandRecord struct {
+	// 命令行
+	CommandLine string `json:"commandLine"`
+	// 命令执行退出码
+	ExitCode int `json:"exitCode"`
+	// 执行输出开始在日志中的字节偏移（含）
+	ExecOutputStart int64 `json:"execOutputStart"`
+	// 执行输出结束在日志中的字节偏移（不含）
+	ExecOutputEnd int64 `json:"execOutputEnd"`
 }
