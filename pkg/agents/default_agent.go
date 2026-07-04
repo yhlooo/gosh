@@ -12,6 +12,7 @@ import (
 
 	"github.com/yhlooo/gosh/pkg/agents/tools"
 	"github.com/yhlooo/gosh/pkg/models"
+	"github.com/yhlooo/gosh/pkg/term"
 	"github.com/yhlooo/gosh/pkg/tokentracker"
 )
 
@@ -47,8 +48,9 @@ type GoshAgent struct {
 	opts        GoshAgentOptions
 	genericOpts Options
 
-	g            *genkit.Genkit
-	tokenTracker *tokentracker.TokenTracker
+	g                *genkit.Genkit
+	tokenTracker     *tokentracker.TokenTracker
+	commandCollector *term.CommandCollector
 
 	chatTurnFlow ChatTurnFlow
 
@@ -64,6 +66,7 @@ type Session struct {
 	lock         sync.RWMutex
 	cancelPrompt context.CancelFunc
 
+	lastCmdIndex      int
 	history           []*ai.Message
 	lastContextWindow int64
 }
@@ -100,7 +103,8 @@ func (a *GoshAgent) Initialize(ctx context.Context, opts Options) error {
 	// 设置其它属性
 	a.genericOpts = opts
 	a.tokenTracker = tokentracker.NewTracker(a.availableModels)
-	a.session = &Session{}
+	a.commandCollector = opts.CommandCollector
+	a.session = &Session{lastCmdIndex: a.commandCollector.LastCommandIndex()}
 
 	return nil
 }

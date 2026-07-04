@@ -77,6 +77,7 @@ type CommandCollector struct {
 	closed bool
 	state  OutputState
 
+	cmdIndex  int
 	histories []CommandRecord
 	curCmd    *CommandRecord
 
@@ -242,7 +243,8 @@ func (cc *CommandCollector) handleOSC(cmd int, data []byte) {
 					cc.logger.Error(err, "stat exec output file error")
 					return
 				}
-				curCmd.Index = len(cc.histories)
+				curCmd.Index = cc.cmdIndex
+				cc.cmdIndex++
 				curCmd.ExitCode = new(exitCode)
 				curCmd.ExecOutputEnd = new(stat.Size())
 				curCmd.EndTime = new(time.Now())
@@ -283,7 +285,7 @@ func (cc *CommandCollector) ListLastNCommands(n int) []CommandRecord {
 
 	if cc.curCmd != nil {
 		last := *cc.curCmd
-		last.Index = len(cc.histories) // 设置临时序号
+		last.Index = cc.cmdIndex // 设置临时序号
 		ret = append(ret, last)
 	}
 
@@ -295,9 +297,6 @@ func (cc *CommandCollector) ListLastNCommands(n int) []CommandRecord {
 // 读取指定命令的输出，从第 offset+1 个字节起读最多 limit 个字节
 // limit 最大值为 1Mi ，在剩余内容不足 limit 时返回内容大小可以小于 limit
 func (cc *CommandCollector) ReadExecOutput(index int, offset, limit int64) ([]byte, error) {
-	if index < 0 {
-		return nil, fmt.Errorf("no command record: %d", index)
-	}
 	if limit < 0 {
 		return nil, nil
 	}
@@ -312,16 +311,16 @@ func (cc *CommandCollector) ReadExecOutput(index int, offset, limit int64) ([]by
 	defer cc.lock.RUnlock()
 
 	var cmd *CommandRecord
-	if index > len(cc.histories) {
+	if index > cc.cmdIndex || index < cc.cmdIndex-len(cc.histories) {
 		return nil, fmt.Errorf("no command record: %d", index)
 	}
-	if index == len(cc.histories) {
+	if index == cc.cmdIndex {
 		if cc.curCmd == nil {
 			return nil, fmt.Errorf("no command record: %d", index)
 		}
 		cmd = cc.curCmd
 	} else {
-		cmd = &cc.histories[index]
+		cmd = &cc.histories[index-cc.cmdIndex+len(cc.histories)]
 	}
 
 	if cmd.ExecOutputEnd != nil {
@@ -337,6 +336,16 @@ func (cc *CommandCollector) ReadExecOutput(index int, offset, limit int64) ([]by
 	ret := make([]byte, limit)
 	n, err := cc.execOutFile.ReadAt(ret, cmd.ExecOutputStart+offset)
 	return ret[:n], err
+}
+
+// LastCommandIndex 最后一个开始执行的命令序号
+func (cc *CommandCollector) LastCommandIndex() int {
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
+	if cc.curCmd == nil {
+		return cc.cmdIndex - 1
+	}
+	return cc.cmdIndex
 }
 
 // CommandRecord 命令执行记录

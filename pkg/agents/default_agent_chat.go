@@ -2,9 +2,11 @@ package agents
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/core"
@@ -35,9 +37,12 @@ func (a *GoshAgent) Chat(ctx context.Context, prompt string) error {
 	messages := a.session.history
 	lastContextWindow := a.session.lastContextWindow
 
+	lastCmdIndex := a.session.lastCmdIndex
+
 	defer func() {
 		a.session.lock.Lock()
 		a.session.cancelPrompt = nil
+		a.session.lastCmdIndex = a.commandCollector.LastCommandIndex()
 		a.session.history = messages
 		a.session.lastContextWindow = lastContextWindow
 		a.session.lock.Unlock()
@@ -67,11 +72,46 @@ func (a *GoshAgent) Chat(ctx context.Context, prompt string) error {
 
 	history := make([]*ai.Message, len(messages))
 	copy(history, messages)
-	messages = append(messages, ai.NewUserTextMessage(prompt))
+
+	// 构造 Prompt
+	promptMsg := ai.NewUserTextMessage(prompt)
+	if cmdIndex := a.commandCollector.LastCommandIndex(); cmdIndex > lastCmdIndex {
+		n := cmdIndex - lastCmdIndex
+		omitN := 0
+		if n > 10 {
+			omitN = n - 10
+			n = 10
+		}
+		records := a.commandCollector.ListLastNCommands(n)
+		execs := make([]ExecRecord, 0, len(records))
+		for _, record := range records {
+			if record.Index <= lastCmdIndex {
+				continue
+			}
+			execs = append(execs, ExecRecord{
+				Index:       record.Index,
+				CommandLine: record.CommandLine,
+				ExitCode:    record.ExitCode,
+				StartTime:   record.StartTime,
+				EndTime:     record.EndTime,
+			})
+		}
+		recentExecs := &ExecRecords{
+			Description: "The following are commands recently executed by the user.",
+			Execs:       execs,
+		}
+		if omitN > 0 {
+			recentExecs.Description += fmt.Sprintf(" %d earlier commands omitted.", omitN)
+		}
+		recentExecsRaw, _ := xml.Marshal(recentExecs)
+		promptMsg.Content = append([]*ai.Part{ai.NewTextPart(string(recentExecsRaw) + "\n")}, promptMsg.Content...)
+	}
+
+	messages = append(messages, promptMsg)
 
 	chatOut, err := a.chatTurnFlow.Run(ctx, ChatTurnInput{
-		Prompt:  prompt,
 		History: history,
+		Prompt:  promptMsg,
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -95,16 +135,36 @@ func (a *GoshAgent) Chat(ctx context.Context, prompt string) error {
 	return nil
 }
 
+// ExecRecords 命令执行记录
+type ExecRecords struct {
+	XMLName     xml.Name     `xml:"exec-records"`
+	Description string       `xml:",innerxml"`
+	Execs       []ExecRecord `xml:"exec"`
+}
+
+// ExecRecord 命令执行记录
+type ExecRecord struct {
+	XMLName xml.Name `xml:"exec"`
+
+	Index       int        `xml:"index,attr"`
+	CommandLine string     `xml:"cmdline"`
+	ExitCode    *int       `xml:"exit-code,omitempty"`
+	StartTime   time.Time  `xml:"start-time"`
+	EndTime     *time.Time `xml:"end-time,omitempty"`
+}
+
 // ChatTurnInput 对话输入
 type ChatTurnInput struct {
-	Prompt  string        `json:"prompt"`
-	History []*ai.Message `json:"history,omitempty"`
+	// 历史记录
+	History []*ai.Message
+	// 指令
+	Prompt *ai.Message
 }
 
 // ChatTurnOutput 对话输出
 type ChatTurnOutput struct {
-	Messages          []*ai.Message `json:"messages"`
-	LastContextWindow int64         `json:"lastContextWindow,omitempty"`
+	Messages          []*ai.Message
+	LastContextWindow int64
 }
 
 // ChatTurnFlow 对话流程
@@ -129,6 +189,12 @@ func (a *GoshAgent) handleChatTurn(ctx context.Context, in ChatTurnInput) (ChatT
 
 ## 严格遵循以下要求进行回答
 - 以用户提问的语言回答问题，比如用户用中文提问就用中文回答，用户用英文提问就用英文回答；
+
+## 输出
+- 你的输出展示在 xterm-256color 终端中，建议使用 ANSI 序列提高可读性。比如：
+  - ` + "\x1b[1m强调\x1b[0m" + `
+  - ` + "\x1b[2m弱化\x1b[0m" + `
+  - ` + "\x1b[31m颜色\x1b[0m" + `
 `), // TODO: 待完善
 		ai.WithReturnToolRequests(true),
 		ai.WithUse(tokentracker.TrackerFromContext(ctx).Middleware()),
@@ -150,8 +216,7 @@ func (a *GoshAgent) handleChatTurn(ctx context.Context, in ChatTurnInput) (ChatT
 
 	output := ChatTurnOutput{}
 	messages := slices.Clone(in.History)
-	promptMsg := ai.NewUserTextMessage(in.Prompt)
-	messages = append(messages, promptMsg)
+	messages = append(messages, in.Prompt)
 	for {
 		subTurnOpts := append([]ai.GenerateOption{ai.WithMessages(messages...)}, opts...)
 
