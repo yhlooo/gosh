@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/firebase/genkit/go/ai"
+
+	"github.com/yhlooo/gosh/pkg/term"
 )
 
 // Agent 接口
@@ -19,4 +21,5 @@ type Agent interface {
 // Options Agent 运行选项
 type Options struct {
 	ChatOutputStreamHandler ai.ModelStreamCallback
+	CommandCollector        *term.CommandCollector
 }

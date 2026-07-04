@@ -10,6 +10,7 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/go-logr/logr"
 
+	"github.com/yhlooo/gosh/pkg/agents/tools"
 	"github.com/yhlooo/gosh/pkg/models"
 	"github.com/yhlooo/gosh/pkg/tokentracker"
 )
@@ -85,7 +86,10 @@ func (a *GoshAgent) Initialize(ctx context.Context, opts Options) error {
 		logger.Info(fmt.Sprintf("registered model: %s", m.Name))
 	}
 
-	// TODO: 注册工具
+	// 注册工具
+	a.availableTools = append(a.availableTools, ai.ToolRef(tools.DefineToolGetHistory(a.g, opts.CommandCollector)))
+	a.availableTools = append(a.availableTools, ai.ToolRef(tools.DefineToolReadExecOutput(a.g, opts.CommandCollector)))
+
 	for _, t := range a.availableTools {
 		logger.Info(fmt.Sprintf("registered tool: %s", t.Name()))
 	}

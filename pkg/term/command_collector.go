@@ -2,6 +2,7 @@ package term
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,15 +12,18 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/parser"
 	headlessterm "github.com/danielgatis/go-headless-term"
+	"github.com/go-logr/logr"
 )
 
 // NewCommandCollector 创建命令收集器
-func NewCommandCollector(logPath, execOutPath string) (*CommandCollector, error) {
+func NewCommandCollector(ctx context.Context, logPath, execOutPath string) (*CommandCollector, error) {
 	cc := &CommandCollector{
+		logger:     logr.FromContextOrDiscard(ctx).WithName("command-collector"),
 		parser:     ansi.NewParser(),
 		buff:       &bytes.Buffer{},
 		promptBuff: &bytes.Buffer{},
@@ -45,6 +49,7 @@ func NewCommandCollector(logPath, execOutPath string) (*CommandCollector, error)
 		_ = cc.Close()
 		return nil, fmt.Errorf("open exec output file %q error: %w", execOutPath, err)
 	}
+	cc.execOutFilePath = execOutPath
 	cc.execOutFile = execOutFile
 
 	return cc, nil
@@ -66,17 +71,23 @@ const (
 
 // CommandCollector 命令收集器
 type CommandCollector struct {
-	lock sync.RWMutex
+	lock   sync.RWMutex
+	logger logr.Logger
 
 	closed bool
 	state  OutputState
-	curCmd *CommandRecord
 
-	parser        *ansi.Parser
-	buff          *bytes.Buffer
-	promptBuff    *bytes.Buffer
-	cmdBuff       *headlessterm.Terminal
-	execOutFile   *os.File
+	histories []CommandRecord
+	curCmd    *CommandRecord
+
+	parser     *ansi.Parser
+	buff       *bytes.Buffer
+	promptBuff *bytes.Buffer
+	cmdBuff    *headlessterm.Terminal
+
+	execOutFilePath string
+	execOutFile     *os.File
+
 	cmdLogEncoder *json.Encoder
 	cmdLogFile    *os.File
 }
@@ -92,9 +103,6 @@ func (cc *CommandCollector) Write(p []byte) (n int, err error) {
 		return 0, fs.ErrClosed
 	}
 
-	if _, err := cc.execOutFile.Seek(0, io.SeekEnd); err != nil {
-		return 0, fmt.Errorf("seek exec output file to end error: %w", err)
-	}
 	for i, c := range p {
 		cc.parser.Advance(c)
 		cc.buff.WriteByte(c)
@@ -199,42 +207,152 @@ func (cc *CommandCollector) handleOSC(cmd int, data []byte) {
 			_, _ = cc.execOutFile.WriteString(cc.cmdBuff.String())
 			_, _ = cc.execOutFile.WriteString("\n-------- ExecOutput --------\n")
 
-			stat, _ := cc.execOutFile.Stat()
+			stat, err := cc.execOutFile.Stat()
+			if err != nil {
+				cc.logger.Error(err, "stat exec output file error")
+				cc.curCmd = nil
+				return
+			}
 			cc.curCmd = &CommandRecord{
 				CommandLine:     cc.cmdBuff.String(),
+				StartTime:       time.Now(),
 				ExecOutputStart: stat.Size(),
-				ExecOutputEnd:   stat.Size(),
 			}
+
 		case "133;D":
 			// 命令执行结束
 			cc.state = OutputOthers
 			exitCode := 0
 			dataDivided := strings.Split(string(data), ";")
 			if len(dataDivided) >= 3 {
-				exitCode, _ = strconv.Atoi(dataDivided[2])
+				var err error
+				exitCode, err = strconv.Atoi(dataDivided[2])
+				if err != nil {
+					cc.logger.Error(err, "parse exit code error")
+					cc.curCmd = nil
+					return
+				}
 			}
 
 			if cc.curCmd != nil {
 				curCmd := cc.curCmd
 				cc.curCmd = nil
-				stat, _ := cc.execOutFile.Stat()
-				curCmd.ExitCode = exitCode
-				curCmd.ExecOutputEnd = stat.Size()
+				stat, err := cc.execOutFile.Stat()
+				if err != nil {
+					cc.logger.Error(err, "stat exec output file error")
+					return
+				}
+				curCmd.Index = len(cc.histories)
+				curCmd.ExitCode = new(exitCode)
+				curCmd.ExecOutputEnd = new(stat.Size())
+				curCmd.EndTime = new(time.Now())
 				_ = cc.cmdLogEncoder.Encode(curCmd)
+				cc.histories = append(cc.histories, *curCmd)
 			}
 			_, _ = cc.execOutFile.WriteString(fmt.Sprintf("\n-------- Exit(%d) --------\n", exitCode))
 		}
 	}
 }
 
+// ListLastNCommands 列出最近 n 个命令
+//
+// n 最大值为 100 ，记录的命令数少于 n 时返回命令数可以小于 n ，结果按命令开始时间升序排列
+func (cc *CommandCollector) ListLastNCommands(n int) []CommandRecord {
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
+
+	if n > 100 {
+		n = 100
+	}
+	if cc.curCmd != nil {
+		n--
+	}
+	if n < 0 {
+		n = 0
+	}
+	if n > len(cc.histories) {
+		n = len(cc.histories)
+	}
+
+	var ret []CommandRecord
+
+	if n > 0 {
+		ret = make([]CommandRecord, n)
+		copy(ret, cc.histories[len(cc.histories)-n:])
+	}
+
+	if cc.curCmd != nil {
+		last := *cc.curCmd
+		last.Index = len(cc.histories) // 设置临时序号
+		ret = append(ret, last)
+	}
+
+	return ret
+}
+
+// ReadExecOutput 读命令执行输出
+//
+// 读取指定命令的输出，从第 offset+1 个字节起读最多 limit 个字节
+// limit 最大值为 1Mi ，在剩余内容不足 limit 时返回内容大小可以小于 limit
+func (cc *CommandCollector) ReadExecOutput(index int, offset, limit int64) ([]byte, error) {
+	if index < 0 {
+		return nil, fmt.Errorf("no command record: %d", index)
+	}
+	if limit < 0 {
+		return nil, nil
+	}
+	if limit > 1<<20 {
+		limit = 1 << 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
+
+	var cmd *CommandRecord
+	if index > len(cc.histories) {
+		return nil, fmt.Errorf("no command record: %d", index)
+	}
+	if index == len(cc.histories) {
+		if cc.curCmd == nil {
+			return nil, fmt.Errorf("no command record: %d", index)
+		}
+		cmd = cc.curCmd
+	} else {
+		cmd = &cc.histories[index]
+	}
+
+	if cmd.ExecOutputEnd != nil {
+		size := *cmd.ExecOutputEnd - cmd.ExecOutputStart
+		if offset >= size {
+			return nil, nil
+		}
+		if limit > size-offset {
+			limit = size - offset
+		}
+	}
+
+	ret := make([]byte, limit)
+	n, err := cc.execOutFile.ReadAt(ret, cmd.ExecOutputStart+offset)
+	return ret[:n], err
+}
+
 // CommandRecord 命令执行记录
 type CommandRecord struct {
+	// 命令序号
+	Index int `json:"index"`
 	// 命令行
 	CommandLine string `json:"commandLine"`
+	// 开始时间
+	StartTime time.Time `json:"startTime"`
+	// 结束时间
+	EndTime *time.Time `json:"endTime,omitempty"`
 	// 命令执行退出码
-	ExitCode int `json:"exitCode"`
+	ExitCode *int `json:"exitCode,omitempty"`
 	// 执行输出开始在日志中的字节偏移（含）
 	ExecOutputStart int64 `json:"execOutputStart"`
 	// 执行输出结束在日志中的字节偏移（不含）
-	ExecOutputEnd int64 `json:"execOutputEnd"`
+	ExecOutputEnd *int64 `json:"execOutputEnd,omitempty"`
 }

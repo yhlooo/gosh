@@ -108,6 +108,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 
 	var err error
 	ctl.commandCollector, err = term.NewCommandCollector(
+		ctx,
 		filepath.Join(ctl.opts.SessionDir, CommandLogFile),
 		filepath.Join(ctl.opts.SessionDir, ExecOutputRawFile),
 	)
@@ -120,6 +121,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	// 初始化 Agent
 	if err = ctl.agent.Initialize(ctx, agents.Options{
 		ChatOutputStreamHandler: ctl.agentOutputHandler(),
+		CommandCollector:        ctl.commandCollector,
 	}); err != nil {
 		return fmt.Errorf("initialize agent error: %w", err)
 	}

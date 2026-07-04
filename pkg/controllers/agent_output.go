@@ -52,7 +52,7 @@ func (ctl *Controller) agentOutputHandler() func(ctx context.Context, chunk *ai.
 				_, _ = ctl.output.Write([]byte(fmt.Sprintf(
 					"%s\x1b[2;34mToolCall: %s %s\x1b[0m",
 					resetPrefix,
-					part.ToolResponse.Ref,
+					part.ToolRequest.Ref,
 					inputRawStr,
 				)))
 

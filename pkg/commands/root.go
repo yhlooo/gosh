@@ -222,9 +222,7 @@ func run(ctx context.Context, opts Options) error {
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return fmt.Errorf("create session directory %q error: %w", sessDir, err)
 	}
-	if globalOpts.Debug {
-		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] session id: %s, dir: %s\n", sessID, sessDir)
-	}
+	_, _ = fmt.Fprintf(os.Stderr, "\x1b[2;34mSession: %s\x1b[0m\n", sessID)
 	_ = os.Setenv("GOSH_SESSION", sessID)
 
 	// 创建控制器和 Agent
