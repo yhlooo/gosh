@@ -4,6 +4,8 @@ import (
 	"io"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/yhlooo/gosh/pkg/term"
 )
 
 // OutputHandler 返回作为输出处理器的控制器
@@ -27,6 +29,19 @@ func (ctl *OutputHandler) Write(p []byte) (n int, err error) {
 		writeData := []byte{c}
 		if _, err := ctl.commandCollector.Write(writeData); err != nil {
 			return i, err
+		}
+
+		ccState := ctl.commandCollector.State()
+		switch ccState {
+		case term.OutputOthers, term.OutputPrompt, term.OutputCommand:
+			ctl.inExec = false
+		case term.OutputCommandExec:
+			ctl.inExec = true
+		}
+
+		if ccState == term.OutputPrompt && (*Controller)(ctl).State() != Shell {
+			// Agent 输出期间隐藏 prompt
+			continue
 		}
 		if _, err := ctl.output.Write(writeData); err != nil {
 			return i, err

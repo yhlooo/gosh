@@ -23,7 +23,7 @@ type ReadExecOutputOutput struct {
 	Output string `json:"output"`
 }
 
-// ReadExecOutputFn 读命令执行输出方法
+// ReadExecOutputFn 读命令执行输出工具方法
 func ReadExecOutputFn(cc *term.CommandCollector) ai.ToolFunc[ReadExecOutputInput, ReadExecOutputOutput] {
 	return func(ctx *ai.ToolContext, in ReadExecOutputInput) (ReadExecOutputOutput, error) {
 		if in.Limit <= 0 {
@@ -42,10 +42,11 @@ func ReadExecOutputFn(cc *term.CommandCollector) ai.ToolFunc[ReadExecOutputInput
 // ToolReadExecOutput 读命令执行输出工具
 type ToolReadExecOutput = *ai.ToolDef[ReadExecOutputInput, ReadExecOutputOutput]
 
+// DefineToolReadExecOutput 注册 ReadExecOutput 工具
 func DefineToolReadExecOutput(g *genkit.Genkit, cc *term.CommandCollector) ToolReadExecOutput {
 	return genkit.DefineTool(
 		g, "ReadExecOutput",
-		"读取指定命令执行输出内容",
+		"读取指定命令执行输出内容", // TODO: ...
 		ReadExecOutputFn(cc),
 	)
 }

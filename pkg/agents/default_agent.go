@@ -10,6 +10,7 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/go-logr/logr"
 
+	"github.com/yhlooo/gosh/pkg/agents/generic"
 	"github.com/yhlooo/gosh/pkg/agents/tools"
 	"github.com/yhlooo/gosh/pkg/models"
 	"github.com/yhlooo/gosh/pkg/term"
@@ -46,10 +47,11 @@ func NewGoshAgent(opts GoshAgentOptions) *GoshAgent {
 // GoshAgent 是 gosh 内置的 Agent 的默认实现
 type GoshAgent struct {
 	opts        GoshAgentOptions
-	genericOpts Options
+	genericOpts generic.Options
 
 	g                *genkit.Genkit
 	tokenTracker     *tokentracker.TokenTracker
+	shellController  generic.ShellController
 	commandCollector *term.CommandCollector
 
 	chatTurnFlow ChatTurnFlow
@@ -72,12 +74,15 @@ type Session struct {
 }
 
 // Initialize 初始化
-func (a *GoshAgent) Initialize(ctx context.Context, opts Options) error {
+func (a *GoshAgent) Initialize(ctx context.Context, opts generic.Options) error {
 	logger := logr.FromContextOrDiscard(ctx).WithName(loggerName)
 
 	if a.g != nil {
 		return nil
 	}
+
+	a.shellController = opts.ShellController
+	a.commandCollector = a.shellController.CommandCollector()
 
 	// 创建 genkit 对象，注册模型
 	a.g, a.availableModels = newGenkitWithModels(ctx, a.opts.ModelProviders, a.opts.DefaultModels)
@@ -90,8 +95,9 @@ func (a *GoshAgent) Initialize(ctx context.Context, opts Options) error {
 	}
 
 	// 注册工具
-	a.availableTools = append(a.availableTools, ai.ToolRef(tools.DefineToolGetHistory(a.g, opts.CommandCollector)))
-	a.availableTools = append(a.availableTools, ai.ToolRef(tools.DefineToolReadExecOutput(a.g, opts.CommandCollector)))
+	a.availableTools = append(a.availableTools, ai.ToolRef(tools.DefineToolGetHistory(a.g, a.commandCollector)))
+	a.availableTools = append(a.availableTools, ai.ToolRef(tools.DefineToolReadExecOutput(a.g, a.commandCollector)))
+	a.availableTools = append(a.availableTools, ai.ToolRef(tools.DefineToolExec(a.g, a.shellController)))
 
 	for _, t := range a.availableTools {
 		logger.Info(fmt.Sprintf("registered tool: %s", t.Name()))
@@ -103,7 +109,6 @@ func (a *GoshAgent) Initialize(ctx context.Context, opts Options) error {
 	// 设置其它属性
 	a.genericOpts = opts
 	a.tokenTracker = tokentracker.NewTracker(a.availableModels)
-	a.commandCollector = opts.CommandCollector
 	a.session = &Session{lastCmdIndex: a.commandCollector.LastCommandIndex()}
 
 	return nil

@@ -1,4 +1,4 @@
-package agents
+package generic
 
 import (
 	"context"
@@ -18,8 +18,16 @@ type Agent interface {
 	Cancel() error
 }
 
+// ShellController shell 控制器
+type ShellController interface {
+	// CommandCollector 返回命令收集器
+	CommandCollector() *term.CommandCollector
+	// ExecuteCommand 执行命令
+	ExecuteCommand(ctx context.Context, cmdline string) (*term.CommandRecord, error)
+}
+
 // Options Agent 运行选项
 type Options struct {
 	ChatOutputStreamHandler ai.ModelStreamCallback
-	CommandCollector        *term.CommandCollector
+	ShellController         ShellController
 }

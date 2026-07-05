@@ -18,7 +18,8 @@ import (
 	"github.com/go-logr/logr"
 	goterm "golang.org/x/term"
 
-	"github.com/yhlooo/gosh/pkg/agents"
+	"github.com/yhlooo/gosh/pkg/agents/generic"
+	agentsgeneric "github.com/yhlooo/gosh/pkg/agents/generic"
 	"github.com/yhlooo/gosh/pkg/term"
 )
 
@@ -37,7 +38,7 @@ type Options struct {
 	TraceIO bool
 
 	// Agent
-	Agent agents.Agent
+	Agent generic.Agent
 }
 
 // Validate 校验选项
@@ -71,19 +72,38 @@ type Controller struct {
 
 	ctx          context.Context
 	logger       logr.Logger
-	agent        agents.Agent
+	agent        generic.Agent
 	cmd          *exec.Cmd
 	ptmx         *os.File
 	output       *os.File
 	inputParser  *ansi.Parser
 	outputParser *ansi.Parser
 
-	inputState    InputState
+	inAgent       bool
+	inAgentOutput bool
+	inExec        bool
+
 	inputBuff     *bytes.Buffer
 	agentInputBox *term.InputBox
 
 	commandCollector *term.CommandCollector
 }
+
+// State 状态
+type State uint32
+
+const (
+	// Shell 输入由 shell 处理
+	Shell State = iota
+	// Exec 输入由正在执行的命令处理
+	Exec
+	// AgentInput 写 Agent 输入
+	AgentInput
+	// AgentOutput Agent 输出中
+	AgentOutput
+)
+
+var _ agentsgeneric.ShellController = (*Controller)(nil)
 
 const (
 	CommandLogFile     = "commands.jsonl"
@@ -119,9 +139,9 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	ctl.inputBuff = &bytes.Buffer{}
 
 	// 初始化 Agent
-	if err = ctl.agent.Initialize(ctx, agents.Options{
+	if err = ctl.agent.Initialize(ctx, generic.Options{
+		ShellController:         ctl,
 		ChatOutputStreamHandler: ctl.agentOutputHandler(),
-		CommandCollector:        ctl.commandCollector,
 	}); err != nil {
 		return fmt.Errorf("initialize agent error: %w", err)
 	}
@@ -204,4 +224,23 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	_, _ = io.Copy(ptyOutW, ctl.ptmx)
 
 	return nil
+}
+
+// CommandCollector 返回当前命令收集器
+func (ctl *Controller) CommandCollector() *term.CommandCollector {
+	return ctl.commandCollector
+}
+
+// State 返回当前状态
+func (ctl *Controller) State() State {
+	if ctl.inExec {
+		return Exec
+	}
+	if ctl.inAgentOutput {
+		return AgentOutput
+	}
+	if ctl.inAgent {
+		return AgentInput
+	}
+	return Shell
 }

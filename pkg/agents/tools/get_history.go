@@ -30,8 +30,8 @@ type CommandRecord struct {
 	CommandLine string `json:"commandLine"`
 	// 开始时间
 	StartTime time.Time `json:"startTime"`
-	// 结束时间
-	EndTime *time.Time `json:"endTime,omitempty"`
+	// 执行耗时
+	Duration *time.Duration `json:"duration,omitempty"`
 	// 命令执行退出码
 	ExitCode *int `json:"exitCode,omitempty"`
 	// 命令执行输出内容
@@ -42,7 +42,7 @@ type CommandRecord struct {
 	OutputLength *int64 `json:"outputLength,omitempty"`
 }
 
-// GetHistoryFn 返回获取命令执行历史方法
+// GetHistoryFn 返回获取命令执行历史工具方法
 func GetHistoryFn(cc *term.CommandCollector) ai.ToolFunc[GetHistoryInput, GetHistoryOutput] {
 	return func(ctx *ai.ToolContext, in GetHistoryInput) (GetHistoryOutput, error) {
 		if in.LastN <= 0 {
@@ -77,12 +77,16 @@ func GetHistoryFn(cc *term.CommandCollector) ai.ToolFunc[GetHistoryInput, GetHis
 				}
 				output = string(outputRaw)
 			}
+			var duration *time.Duration
+			if record.EndTime != nil {
+				duration = new(record.EndTime.Sub(record.StartTime))
+			}
 
 			ret = append(ret, CommandRecord{
 				Index:         record.Index,
 				CommandLine:   record.CommandLine,
 				StartTime:     record.StartTime,
-				EndTime:       record.EndTime,
+				Duration:      duration,
 				ExitCode:      record.ExitCode,
 				Output:        output,
 				OutputOmitted: outputOmitted,

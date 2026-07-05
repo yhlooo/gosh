@@ -91,9 +91,29 @@ type CommandCollector struct {
 
 	cmdLogEncoder *json.Encoder
 	cmdLogFile    *os.File
+
+	waitNextCommandChannels []chan CommandRecord
 }
 
 var _ io.Writer = (*CommandCollector)(nil)
+
+// CommandRecord 命令执行记录
+type CommandRecord struct {
+	// 命令序号
+	Index int `json:"index"`
+	// 命令行
+	CommandLine string `json:"commandLine"`
+	// 开始时间
+	StartTime time.Time `json:"startTime"`
+	// 结束时间
+	EndTime *time.Time `json:"endTime,omitempty"`
+	// 命令执行退出码
+	ExitCode *int `json:"exitCode,omitempty"`
+	// 执行输出开始在日志中的字节偏移（含）
+	ExecOutputStart int64 `json:"execOutputStart"`
+	// 执行输出结束在日志中的字节偏移（不含）
+	ExecOutputEnd *int64 `json:"execOutputEnd,omitempty"`
+}
 
 // Write 写入 shell 输出
 func (cc *CommandCollector) Write(p []byte) (n int, err error) {
@@ -203,57 +223,96 @@ func (cc *CommandCollector) handleOSC(cmd int, data []byte) {
 		case "133;C":
 			// 命令开始执行
 			cc.state = OutputCommandExec
-
-			_, _ = cc.execOutFile.WriteString("-------- CommandLine --------\n")
-			_, _ = cc.execOutFile.WriteString(cc.cmdBuff.String())
-			_, _ = cc.execOutFile.WriteString("\n-------- ExecOutput --------\n")
-
-			stat, err := cc.execOutFile.Stat()
-			if err != nil {
-				cc.logger.Error(err, "stat exec output file error")
-				cc.curCmd = nil
-				return
-			}
-			cc.curCmd = &CommandRecord{
-				CommandLine:     cc.cmdBuff.String(),
-				StartTime:       time.Now(),
-				ExecOutputStart: stat.Size(),
-			}
+			cc.handleExecOutputStart()
 
 		case "133;D":
 			// 命令执行结束
 			cc.state = OutputOthers
-			exitCode := 0
-			dataDivided := strings.Split(string(data), ";")
-			if len(dataDivided) >= 3 {
-				var err error
-				exitCode, err = strconv.Atoi(dataDivided[2])
-				if err != nil {
-					cc.logger.Error(err, "parse exit code error")
-					cc.curCmd = nil
-					return
-				}
-			}
-
-			if cc.curCmd != nil {
-				curCmd := cc.curCmd
-				cc.curCmd = nil
-				stat, err := cc.execOutFile.Stat()
-				if err != nil {
-					cc.logger.Error(err, "stat exec output file error")
-					return
-				}
-				curCmd.Index = cc.cmdIndex
-				cc.cmdIndex++
-				curCmd.ExitCode = new(exitCode)
-				curCmd.ExecOutputEnd = new(stat.Size())
-				curCmd.EndTime = new(time.Now())
-				_ = cc.cmdLogEncoder.Encode(curCmd)
-				cc.histories = append(cc.histories, *curCmd)
-			}
-			_, _ = cc.execOutFile.WriteString(fmt.Sprintf("\n-------- Exit(%d) --------\n", exitCode))
+			cc.handleExecOutputEnd(data)
 		}
 	}
+}
+
+// handleExecOutputStart 处理命令执行输出开始
+func (cc *CommandCollector) handleExecOutputStart() {
+	_, _ = cc.execOutFile.WriteString("-------- CommandLine --------\n")
+	_, _ = cc.execOutFile.WriteString(cc.cmdBuff.String())
+	_, _ = cc.execOutFile.WriteString("\n-------- ExecOutput --------\n")
+
+	stat, err := cc.execOutFile.Stat()
+	if err != nil {
+		cc.logger.Error(err, "stat exec output file error")
+		cc.curCmd = nil
+		return
+	}
+	cc.curCmd = &CommandRecord{
+		CommandLine:     cc.cmdBuff.String(),
+		StartTime:       time.Now(),
+		ExecOutputStart: stat.Size(),
+	}
+}
+
+// handleExecOutputEnd 处理命令执行输出结束
+func (cc *CommandCollector) handleExecOutputEnd(data []byte) {
+	// 提取退出码
+	var exitCode *int
+	dataDivided := strings.Split(string(data), ";") // 133;D;<exitCode>
+	if len(dataDivided) >= 3 {
+		exitCodeInt, err := strconv.Atoi(dataDivided[2])
+		if err != nil {
+			cc.logger.Error(err, "parse exit code error")
+		} else {
+			exitCode = &exitCodeInt
+		}
+	}
+
+	if cc.curCmd == nil {
+		// 没有记录命令开始，忽略
+		return
+	}
+
+	// 记录命令执行历史
+	curCmd := cc.curCmd
+	cc.curCmd = nil
+	stat, err := cc.execOutFile.Stat()
+	if err != nil {
+		cc.logger.Error(err, "stat exec output file error")
+		return
+	}
+	curCmd.Index = cc.cmdIndex
+	cc.cmdIndex++
+	curCmd.ExitCode = exitCode
+	curCmd.ExecOutputEnd = new(stat.Size())
+	curCmd.EndTime = new(time.Now())
+	_ = cc.cmdLogEncoder.Encode(curCmd)
+	cc.histories = append(cc.histories, *curCmd)
+
+	// 输出命令结束标志
+	showingExitCode := ""
+	if exitCode != nil {
+		showingExitCode = fmt.Sprintf("(%d)", *exitCode)
+	}
+	_, _ = cc.execOutFile.WriteString(fmt.Sprintf("\n-------- Exit%s --------\n", showingExitCode))
+
+	// 通知订阅方
+	for _, ch := range cc.waitNextCommandChannels {
+		select {
+		case ch <- *curCmd:
+		default:
+			cc.logger.Info("WARN wait next command channel busy, skip")
+		}
+		close(ch)
+	}
+	cc.waitNextCommandChannels = nil
+}
+
+// WaitNextCommand 等待下一个命令执行完成
+//
+// 下一个命令执行完成后通过 ch 发送命令执行记录，随后关闭 ch
+func (cc *CommandCollector) WaitNextCommand(ch chan CommandRecord) {
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
+	cc.waitNextCommandChannels = append(cc.waitNextCommandChannels, ch)
 }
 
 // ListLastNCommands 列出最近 n 个命令
@@ -348,20 +407,9 @@ func (cc *CommandCollector) LastCommandIndex() int {
 	return cc.cmdIndex
 }
 
-// CommandRecord 命令执行记录
-type CommandRecord struct {
-	// 命令序号
-	Index int `json:"index"`
-	// 命令行
-	CommandLine string `json:"commandLine"`
-	// 开始时间
-	StartTime time.Time `json:"startTime"`
-	// 结束时间
-	EndTime *time.Time `json:"endTime,omitempty"`
-	// 命令执行退出码
-	ExitCode *int `json:"exitCode,omitempty"`
-	// 执行输出开始在日志中的字节偏移（含）
-	ExecOutputStart int64 `json:"execOutputStart"`
-	// 执行输出结束在日志中的字节偏移（不含）
-	ExecOutputEnd *int64 `json:"execOutputEnd,omitempty"`
+// State 返回当前输出状态
+func (cc *CommandCollector) State() OutputState {
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
+	return cc.state
 }
