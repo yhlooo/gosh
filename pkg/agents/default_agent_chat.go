@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
+	"text/template"
 	"time"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/core"
 	"github.com/firebase/genkit/go/genkit"
@@ -182,20 +185,63 @@ func (e ToolCallError) Error() string {
 	return e.Err
 }
 
-// handleChatTurn 处理一轮对话
-func (a *GoshAgent) handleChatTurn(ctx context.Context, in ChatTurnInput) (ChatTurnOutput, error) {
-	opts := []ai.GenerateOption{
-		ai.WithSystem(`你是一个 shell 专家，负责解决用户关于 shell 的问题
+// ChatSystemPromptTpl 对话 system prompt 模版
+var ChatSystemPromptTpl = template.Must(template.New("ChatSystemPrompt").
+	Funcs(sprig.FuncMap()).
+	Parse(`你是一个 shell 专家，负责解决用户关于 shell 的问题。
 
 ## 严格遵循以下要求进行回答
 - 以用户提问的语言回答问题，比如用户用中文提问就用中文回答，用户用英文提问就用英文回答；
 
 ## 输出
-- 你的输出展示在 xterm-256color 终端中，建议使用 ANSI 序列提高可读性。比如：
+- 你的输出展示在 TERM={{ .TerminalType }} 的终端中；
+{{- if has .TerminalType (list "xterm-256color" "xterm-color" "xterm" "linux" "vt100" "ansi") }}
+- 当前终端支持 ANSI SGR 序列，积极使用它们提高输出可读性；
+{{- else }}
+- 如果终端支持 ANSI SGR 序列，积极使用它们提高输出可读性；
+{{- end }}
+  示例：
   - ` + "\x1b[1m强调\x1b[0m" + `
+  - ` + "\x1b[1;97m加亮色更加强调\x1b[0m" + `
   - ` + "\x1b[2m弱化\x1b[0m" + `
   - ` + "\x1b[31m颜色\x1b[0m" + `
-`), // TODO: 待完善
+  - 代码块可以添加不一样的底色 ` + "\x1b[100mcode\x1b[0m" + `
+  - 链接添加下划线 ` + "\x1b[4mhttps://example.com\x1b[0m" + `
+- 使用 Unicode 制表符号 ( ─│┌├ 等) 表示表格，而不是 Markdown 。因为在终端中 Markdown 的表格语法可读性不高；
+  示例：
+  ┌──────┬──────┬──────┐
+  │ col1 │ col2 │ col3 │
+  ├──────┼──────┼──────┤
+  │ row1 │   .. │ ...  │
+  │ row2 │  ... │ ..   │
+  │ row3 │    . │ .    │
+  └──────┴──────┴──────┘
+`))
+
+// ChatSystemPromptData 渲染对话 system prompt 模版的数据
+type ChatSystemPromptData struct {
+	// 终端类型， TERM 变量的值
+	TerminalType string
+}
+
+// makeChatSystemPrompt 构造对话 system prompt
+func (a *GoshAgent) makeChatSystemPrompt() (string, error) {
+	buff := &strings.Builder{}
+	err := ChatSystemPromptTpl.Execute(buff, ChatSystemPromptData{
+		TerminalType: a.genericOpts.TerminalType,
+	})
+	return buff.String(), err
+}
+
+// handleChatTurn 处理一轮对话
+func (a *GoshAgent) handleChatTurn(ctx context.Context, in ChatTurnInput) (ChatTurnOutput, error) {
+	systemPrompt, err := a.makeChatSystemPrompt()
+	if err != nil {
+		return ChatTurnOutput{}, fmt.Errorf("make system prompt error: %w", err)
+	}
+
+	opts := []ai.GenerateOption{
+		ai.WithSystem(systemPrompt),
 		ai.WithReturnToolRequests(true),
 		ai.WithUse(tokentracker.TrackerFromContext(ctx).Middleware()),
 		ai.WithStreaming(handleTextStream(a.handleChatOutputStream, true, true)),

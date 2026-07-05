@@ -28,6 +28,10 @@ type ShellController interface {
 
 // Options Agent 运行选项
 type Options struct {
+	// 终端类型， TERM 变量的值
+	TerminalType string
+	// 与 Agent 对话输出流处理器
 	ChatOutputStreamHandler ai.ModelStreamCallback
-	ShellController         ShellController
+	// Shell 控制器
+	ShellController ShellController
 }

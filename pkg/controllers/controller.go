@@ -140,6 +140,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 
 	// 初始化 Agent
 	if err = ctl.agent.Initialize(ctx, generic.Options{
+		TerminalType:            os.Getenv("TERM"),
 		ShellController:         ctl,
 		ChatOutputStreamHandler: ctl.agentOutputHandler(),
 	}); err != nil {
