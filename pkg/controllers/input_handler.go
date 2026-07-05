@@ -24,6 +24,11 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 	ctl.inputLock.Lock()
 	defer ctl.inputLock.Unlock()
 
+	if !ctl.ready {
+		// 未就绪期间忽略所有输入
+		return len(p), nil
+	}
+
 	curState := (*Controller)(ctl).State()
 	for i, c := range p {
 		ctl.inputParser.Advance(c)

@@ -215,6 +215,13 @@ func run(ctx context.Context, opts Options) error {
 		m.ReasoningLevel = &opts.ReasoningLevel
 	}
 
+	// 确定 shell 启动命令和参数
+	var shellArgs []string
+	switch filepath.Base(opts.Shell) {
+	case "bash", "zsh", "fish", "tcsh", "xonsh":
+		shellArgs = []string{"-l"}
+	}
+
 	// 确定会话目录
 	sessID := fmt.Sprintf("%x", rand.Uint64())
 	sessDir := filepath.Join(globalOpts.Home, "sessions", sessID)
@@ -228,10 +235,11 @@ func run(ctx context.Context, opts Options) error {
 	// 创建控制器和 Agent
 	ctl, err := controllers.New(controllers.Options{
 		Command:    opts.Shell,
-		Args:       nil,
+		Args:       shellArgs,
 		Env:        nil,
 		TraceIO:    globalOpts.Debug,
 		SessionDir: sessDir,
+		ScriptDir:  filepath.Join(globalOpts.Home, "scripts"),
 		Agent: agents.NewGoshAgent(agents.GoshAgentOptions{
 			ModelProviders:   cfg.ModelProviders,
 			DefaultModels:    m,

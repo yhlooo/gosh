@@ -39,6 +39,14 @@ func (ctl *OutputHandler) Write(p []byte) (n int, err error) {
 			ctl.inExec = true
 		}
 
+		if !ctl.ready {
+			if ccState != term.OutputOthers {
+				// 首次检测到 OSC133 切换状态后说明 shell 已就绪
+				ctl.ready = true
+			}
+			// 未就绪期间隐藏输出，转为就绪的第一个字符也忽略
+			continue
+		}
 		if ccState == term.OutputPrompt && (*Controller)(ctl).State() != Shell {
 			// Agent 输出期间隐藏 prompt
 			continue

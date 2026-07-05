@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/yhlooo/gosh/pkg/agents/generic"
 	agentsgeneric "github.com/yhlooo/gosh/pkg/agents/generic"
+	"github.com/yhlooo/gosh/pkg/shellintegrations"
 	"github.com/yhlooo/gosh/pkg/term"
 )
 
@@ -34,6 +36,8 @@ type Options struct {
 
 	// 会话数据存储目录
 	SessionDir string
+	// 内置脚本存放目录
+	ScriptDir string
 	// 跟踪输入输出
 	TraceIO bool
 
@@ -79,6 +83,7 @@ type Controller struct {
 	inputParser  *ansi.Parser
 	outputParser *ansi.Parser
 
+	ready         bool
 	inAgent       bool
 	inAgentOutput bool
 	inExec        bool
@@ -219,6 +224,34 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		return fmt.Errorf("set stdin raw error: %w", err)
 	}
 	defer func() { _ = goterm.Restore(int(os.Stdin.Fd()), oldState) }()
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		if ctl.ready {
+			// 已经开启 Shell Integration 了
+			return
+		}
+
+		// 开启 Shell Integration
+		initCmd, err := shellintegrations.InitShell(filepath.Base(ctl.opts.Command), filepath.Join(ctl.opts.ScriptDir))
+		if err != nil {
+			ctl.logger.Error(err, "init init shell error")
+			_, _ = ctl.output.WriteString(fmt.Sprintf("\x1b[31mInit shell error: %s\x1b0m\r\n", err.Error()))
+			_ = ctl.ptmx.Close()
+			return
+		}
+		if initCmd != "" {
+			if _, err := ctl.ptmx.Write([]byte(initCmd + "\r")); err != nil {
+				ctl.logger.Error(err, "send init command error")
+				_, _ = ctl.output.WriteString(fmt.Sprintf(
+					"\x1b[31mInit shell error: send init command error: %s\x1b0m\r\n",
+					err.Error(),
+				))
+				_ = ctl.ptmx.Close()
+				return
+			}
+		}
+	}()
 
 	// 转发 shell 输入输出
 	go func() { _, _ = io.Copy(ptyInW, os.Stdin) }()
