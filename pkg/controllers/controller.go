@@ -226,7 +226,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	defer func() { _ = goterm.Restore(int(os.Stdin.Fd()), oldState) }()
 
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		if ctl.ready {
 			// 已经开启 Shell Integration 了
 			return
@@ -250,6 +250,17 @@ func (ctl *Controller) Run(ctx context.Context) error {
 				_ = ctl.ptmx.Close()
 				return
 			}
+		}
+
+		time.Sleep(1000 * time.Millisecond)
+		if !ctl.ready {
+			// 开启 Shell Integration
+			ctl.logger.Info("enable shell integration failed")
+			_, _ = ctl.output.WriteString(fmt.Sprintf(
+				"\x1b[31mInit shell error: enable shell integration failed\x1b0m\r\n",
+			))
+			_ = ctl.ptmx.Close()
+			return
 		}
 	}()
 
