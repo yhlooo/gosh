@@ -8,13 +8,13 @@ const (
 )
 
 var (
-	HY3Preview = ModelConfig{
-		Name:      "hy3-preview",
+	HY3 = ModelConfig{
+		Name:      "hy3",
 		Reasoning: true,
 		Prices: ModelPrices{
-			Input:  2, // > 32K
-			Output: 8,
-			Cached: 0.8,
+			Input:  1,
+			Output: 4,
+			Cached: 0.25,
 		},
 		ContextWindow: 256000,
 		Score:         3,
@@ -23,7 +23,7 @@ var (
 
 // TencentCloudModels 腾讯云推荐模型
 var TencentCloudModels = []ModelConfig{
-	HY3Preview,
+	HY3,
 	DeepseekV4Pro,
 	DeepseekV4Flash,
 	KimiK26,

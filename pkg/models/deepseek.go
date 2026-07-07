@@ -12,9 +12,9 @@ var (
 		Name:      "deepseek-v4-pro",
 		Reasoning: true,
 		Prices: ModelPrices{
-			Input:  12,
-			Output: 24,
-			Cached: 0.1,
+			Input:  3,
+			Output: 6,
+			Cached: 0.025,
 		},
 		ContextWindow: 1000000,
 		Score:         10,

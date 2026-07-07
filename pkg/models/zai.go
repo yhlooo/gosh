@@ -8,6 +8,17 @@ const (
 )
 
 var (
+	GLM52 = ModelConfig{
+		Name:      "glm-5.2",
+		Reasoning: true,
+		Prices: ModelPrices{
+			Input:  8,
+			Output: 28,
+			Cached: 2,
+		},
+		ContextWindow: 1000000,
+		Score:         7,
+	}
 	GLM51 = ModelConfig{
 		Name:      "glm-5.1",
 		Reasoning: true,
@@ -46,6 +57,7 @@ var (
 
 // ZAIModels 建议的智谱 AI 模型
 var ZAIModels = []ModelConfig{
+	GLM52,
 	GLM51,
 	GLM5VTurbo,
 	GLM5,
