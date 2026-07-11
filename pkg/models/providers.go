@@ -19,7 +19,7 @@ type ModelProvider struct {
 	Qwen             *OpenAICompatibleOptions `json:"qwen,omitempty"`
 	MoonshotAI       *OpenAICompatibleOptions `json:"moonshotai,omitempty"`
 	ZAI              *OpenAICompatibleOptions `json:"z-ai,omitempty"`
-	TencentCloud     *OpenAICompatibleOptions `json:"tencent-cloud,omitempty"`
+	TokenHub         *OpenAICompatibleOptions `json:"tokenhub,omitempty"`
 	Minimax          *OpenAICompatibleOptions `json:"minimax,omitempty"`
 }
 
@@ -76,11 +76,11 @@ func (p ModelProvider) Register() ModelRegister {
 			ZAIProviderName, ZAIBaseURL,
 			ZAIModels, DefaultOpenAIExtension,
 		)
-	case p.TencentCloud != nil:
+	case p.TokenHub != nil:
 		return NewOpenAICompatibleRegister(
-			*p.TencentCloud,
-			TencentCloudProviderName, TencentCloudBaseURL,
-			TencentCloudModels, DefaultOpenAIExtension,
+			*p.TokenHub,
+			TokenHubProviderName, TokenHubBaseURL,
+			TokenHubModels, DefaultOpenAIExtension,
 		)
 	case p.Minimax != nil:
 		return NewOpenAICompatibleRegister(

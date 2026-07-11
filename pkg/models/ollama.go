@@ -9,6 +9,13 @@ import (
 	"github.com/firebase/genkit/go/plugins/ollama"
 )
 
+const (
+	// OllamaProviderName Ollama 模型供应商名
+	OllamaProviderName = "ollama"
+	// OllamaBaseURL Ollama 默认 API 地址
+	OllamaBaseURL = "http://localhost:11434"
+)
+
 // OllamaOptions Ollama 选项
 type OllamaOptions struct {
 	// Ollama 服务端地址
@@ -26,7 +33,7 @@ type OllamaOptions struct {
 // Complete 使用默认值补全选项
 func (opts *OllamaOptions) Complete() {
 	if opts.BaseURL == "" {
-		opts.BaseURL = "http://localhost:11434"
+		opts.BaseURL = OllamaBaseURL
 	}
 	if opts.Timeout == 0 {
 		opts.Timeout = 300
@@ -79,4 +86,13 @@ func (r *OllamaRegister) RegisterModels(_ context.Context, g *genkit.Genkit) ([]
 	}
 
 	return registeredModels, nil
+}
+
+// ListOllamaModels 列出 Ollama 模型
+func ListOllamaModels(ctx context.Context, opts OllamaOptions) ([]string, error) {
+	opts.Complete()
+	return ListOpenAICompatibleModels(ctx, OpenAICompatibleOptions{
+		BaseURL: opts.BaseURL + "/v1",
+		APIKey:  "ollama",
+	})
 }

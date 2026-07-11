@@ -2,10 +2,13 @@ package models
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/core/api"
 	"github.com/firebase/genkit/go/genkit"
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 
 	"github.com/yhlooo/gosh/pkg/genkitplugins/oai"
 )
@@ -13,11 +16,11 @@ import (
 // OpenAICompatibleOptions OpenAI 兼容选项
 type OpenAICompatibleOptions struct {
 	// 供应商名
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
 	// API 地址
-	BaseURL string `json:"baseURL"`
+	BaseURL string `json:"baseURL,omitempty"`
 	// API 密钥
-	APIKey string `json:"apiKey"`
+	APIKey string `json:"apiKey,omitempty"`
 	// 模型列表
 	Models []ModelConfig `json:"models,omitempty"`
 }
@@ -185,4 +188,33 @@ func (r *OpenAICompatibleRegister) RegisterModels(_ context.Context, g *genkit.G
 	}
 
 	return registeredModels, nil
+}
+
+// ListOpenAICompatibleModels 列出 OpenAI 兼容的模型
+func ListOpenAICompatibleModels(ctx context.Context, opts OpenAICompatibleOptions) ([]string, error) {
+	oaiOpts := []option.RequestOption{
+		option.WithHTTPClient(http.DefaultClient),
+		option.WithBaseURL(opts.BaseURL),
+	}
+	if opts.APIKey != "" {
+		oaiOpts = append(oaiOpts, option.WithAPIKey(opts.APIKey))
+	}
+
+	client := openai.NewClient(oaiOpts...)
+
+	resp, err := client.Models.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(resp.Data) == 0 {
+		return nil, nil
+	}
+
+	ret := make([]string, len(resp.Data))
+	for i, model := range resp.Data {
+		ret[i] = model.ID
+	}
+
+	return ret, nil
 }

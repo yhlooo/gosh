@@ -33,9 +33,34 @@ Actually it is not a shell, but an enhanced wrapper for shells like zsh / bash. 
 		Other: "Reasoning level (0, 1 or 2)",
 	}
 
-	MsgCmdShortDescVersion         = &i18n.Message{ID: "commands.CmdShortDescVersion", Other: "Print the version information"}
-	MsgVersionOptsOutputFormatDesc = &i18n.Message{ID: "commands.VersionOptsOutputFormatDesc", Other: "Output format. One of (json, yaml)"}
+	MsgCmdShortDescVersion = &i18n.Message{
+		ID:    "commands.CmdShortDescVersion",
+		Other: "Print the version information",
+	}
+	MsgVersionOptsOutputFormatDesc = &i18n.Message{
+		ID:    "commands.VersionOptsOutputFormatDesc",
+		Other: "Output format. One of (json, yaml)",
+	}
 
-	MsgCmdShortDescDebug          = &i18n.Message{ID: "commands.CmdShortDescDebug", Other: "Debug tools (internal)"}
-	MsgCmdShortDescDebugParseANSI = &i18n.Message{ID: "commands.CmdShortDescDebugParseANSI", Other: "Parse ANSI from STDIN"}
+	MsgCmdShortDescDebug = &i18n.Message{
+		ID:    "commands.CmdShortDescDebug",
+		Other: "Debug tools (internal)",
+	}
+	MsgCmdShortDescDebugParseANSI = &i18n.Message{
+		ID:    "commands.CmdShortDescDebugParseANSI",
+		Other: "Parse ANSI from STDIN",
+	}
+
+	MsgCmdShortDescBootstrap = &i18n.Message{
+		ID:    "commands.CmdShortDescBootstrap",
+		Other: "Bootstrap the initial Gosh configuration",
+	}
+	MsgBootstrapOptsForceDesc = &i18n.Message{
+		ID:    "commands.BootstrapOptsForceDesc",
+		Other: "Force override configuration",
+	}
+	MsgBootstrapConfigAlreadyExists = &i18n.Message{
+		ID:    "commands.BootstrapConfigAlreadyExists",
+		Other: "The configuration already exists. use `--force` to override.",
+	}
 )
