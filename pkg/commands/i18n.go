@@ -38,4 +38,6 @@ Actually it is not a shell, but an enhanced wrapper for shells like zsh / bash. 
 
 	MsgCmdShortDescDebug          = &i18n.Message{ID: "commands.CmdShortDescDebug", Other: "Debug tools (internal)"}
 	MsgCmdShortDescDebugParseANSI = &i18n.Message{ID: "commands.CmdShortDescDebugParseANSI", Other: "Parse ANSI from STDIN"}
+
+	MsgCmdShortDescConfig = &i18n.Message{ID: "commands.CmdShortDescConfig", Other: "Configure Gosh"}
 )

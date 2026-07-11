@@ -190,6 +190,7 @@ func NewCommand(name string) *cobra.Command {
 	opts.AddPFlags(cmd.Flags())
 
 	cmd.AddCommand(
+		newConfigCommand(),
 		newVersionCommand(),
 		newDebugCommand(),
 	)
