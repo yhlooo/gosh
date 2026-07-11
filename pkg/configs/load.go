@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-
-	"github.com/yhlooo/gosh/pkg/models"
 )
 
 // LoadConfig 加载配置
@@ -39,21 +37,6 @@ func SaveConfig(path string, cfg Config) error {
 	}
 
 	return nil
-}
-
-// SaveDefaultModels 仅保存默认模型配置
-func SaveDefaultModels(path string, defaultModels models.Models) error {
-	// 读取现有配置
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		return fmt.Errorf("load config error: %w", err)
-	}
-
-	// 只更新 defaultModels 字段
-	cfg.DefaultModels = defaultModels
-
-	// 保存完整配置
-	return SaveConfig(path, cfg)
 }
 
 type cfgPathContextKey struct{}

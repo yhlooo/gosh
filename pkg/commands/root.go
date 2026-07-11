@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/bombsimon/logrusr/v4"
 	"github.com/go-logr/logr"
 	"github.com/sirupsen/logrus"
@@ -19,6 +20,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/yhlooo/gosh/pkg/agents"
+	"github.com/yhlooo/gosh/pkg/bootstrap"
 	"github.com/yhlooo/gosh/pkg/configs"
 	"github.com/yhlooo/gosh/pkg/controllers"
 	"github.com/yhlooo/gosh/pkg/i18n"
@@ -190,6 +192,7 @@ func NewCommand(name string) *cobra.Command {
 	opts.AddPFlags(cmd.Flags())
 
 	cmd.AddCommand(
+		newBootstrapCommand(),
 		newVersionCommand(),
 		newDebugCommand(),
 	)
@@ -202,6 +205,19 @@ func run(ctx context.Context, opts Options) error {
 	globalOpts := GlobalOptionsFromContext(ctx)
 	cfg := configs.ConfigFromContext(ctx)
 	logger := logr.FromContextOrDiscard(ctx)
+
+	if len(cfg.ModelProviders) == 0 || cfg.DefaultModels.Primary == "" {
+		// 运行 bootstrap
+		bs := bootstrap.New()
+		if _, err := tea.NewProgram(bs).Run(); err != nil {
+			return fmt.Errorf("configure gosh error: %w", err)
+		}
+		if ok := bs.ApplyConfig(&cfg); ok {
+			if err := configs.SaveConfig(configs.ConfigPathFromContext(ctx), cfg); err != nil {
+				return fmt.Errorf("save configuration error: %w", err)
+			}
+		}
+	}
 
 	// 确定默认模型
 	m := cfg.DefaultModels
