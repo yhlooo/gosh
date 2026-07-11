@@ -70,72 +70,140 @@ func (b *Bootstrap) ApplyConfig(cfg *configs.Config) bool {
 		return false
 	}
 
+	modelName := b.selectedModel
+	if b.selectedModel == "[others]" {
+		modelName = b.otherModel
+	}
+	extraModels := []models.ModelConfig{{Name: modelName, Reasoning: true}}
+
 	providerName := ""
 	switch b.modelProvider.Type {
 	case models.OllamaProviderName:
-		cfg.ModelProviders = []models.ModelProvider{{Ollama: &models.OllamaOptions{}}}
+		cfg.ModelProviders = []models.ModelProvider{{Ollama: &models.OllamaOptions{
+			Models: extraModels,
+		}}}
 		providerName = models.OllamaProviderName
+
 	case models.DeepseekProviderName:
+		for _, m := range models.DeepseekModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{Deepseek: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.DeepseekProviderName
+
 	case models.ZAIProviderName:
+		for _, m := range models.ZAIModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{ZAI: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.ZAIProviderName
+
 	case models.MoonshotProviderName:
+		for _, m := range models.MoonshotModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{MoonshotAI: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.MoonshotProviderName
+
 	case models.MinimaxProviderName:
+		for _, m := range models.MinimaxModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{Minimax: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.MinimaxProviderName
+
 	case models.TokenHubProviderName:
+		for _, m := range models.TokenHubModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{TokenHub: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.TokenHubProviderName
+
 	case models.QwenProviderName:
+		for _, m := range models.QwenModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{Qwen: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.QwenProviderName
+
 	case models.OpenCodeProviderName:
+		for _, m := range models.OpenCodeModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{OpenCode: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.OpenCodeProviderName
+
 	case models.OpenCodeGoProviderName:
+		for _, m := range models.OpenCodeGoModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{OpenCodeGo: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.OpenCodeGoProviderName
+
 	case models.OpenRouterProviderName:
+		for _, m := range models.OpenRouterModels {
+			if m.Name == modelName {
+				extraModels = nil
+			}
+		}
 		cfg.ModelProviders = []models.ModelProvider{{OpenRouter: &models.OpenAICompatibleOptions{
 			APIKey: b.modelProvider.APIKey,
+			Models: extraModels,
 		}}}
 		providerName = models.OpenRouterProviderName
+
 	case modelProviderTypeOpenAICompatible:
 		cfg.ModelProviders = []models.ModelProvider{{OpenAICompatible: &models.OpenAICompatibleOptions{
 			Name:    b.modelProvider.Name,
 			BaseURL: b.modelProvider.BaseURL,
 			APIKey:  b.modelProvider.APIKey,
+			Models:  extraModels,
 		}}}
 		providerName = b.modelProvider.Name
 	}
 
 	if providerName == "" {
 		return false
-	}
-
-	modelName := b.selectedModel
-	if b.selectedModel == "[others]" {
-		modelName = b.otherModel
 	}
 
 	cfg.DefaultModels = models.Models{

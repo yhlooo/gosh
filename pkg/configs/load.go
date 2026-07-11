@@ -31,6 +31,7 @@ func SaveConfig(path string, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("marshal config to json error: %w", err)
 	}
+	content = append(content, byte('\n'))
 
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		return fmt.Errorf("write config to %q error: %w", path, err)
