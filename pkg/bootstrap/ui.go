@@ -180,7 +180,10 @@ func (b *Bootstrap) newForm() *huh.Form {
 		huh.NewGroup(
 			huh.NewInput().Title("Name").Value(&b.modelProvider.Name).Validate(ValidateProviderName),
 			huh.NewInput().Title("Base URL").Value(&b.modelProvider.BaseURL).Validate(ValidateURL),
-			huh.NewInput().Title("API Key").Value(&b.modelProvider.APIKey),
+			huh.NewInput().
+				Title("API Key").
+				EchoMode(huh.EchoModePassword).
+				Value(&b.modelProvider.APIKey),
 		).
 			Title("OpenAI Compatible").
 			WithHideFunc(func() bool { return b.modelProvider.Type != modelProviderTypeOpenAICompatible }),
@@ -204,7 +207,12 @@ func (b *Bootstrap) newForm() *huh.Form {
 
 // newKnownOpenAICompatibleGroup 创建已知 OpenAI 兼容模型供应商配置组
 func (b *Bootstrap) newKnownOpenAICompatibleGroup(key, name string) *huh.Group {
-	return huh.NewGroup(huh.NewInput().Title("API Key").Value(&b.modelProvider.APIKey)).
+	return huh.NewGroup(
+		huh.NewInput().
+			Title("API Key").
+			EchoMode(huh.EchoModePassword).
+			Value(&b.modelProvider.APIKey),
+	).
 		Title(name).
 		WithHideFunc(func() bool { return b.modelProvider.Type != key })
 }
