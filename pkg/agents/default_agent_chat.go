@@ -92,12 +92,16 @@ func (a *GoshAgent) Chat(ctx context.Context, prompt string) error {
 			if record.Index <= lastCmdIndex {
 				continue
 			}
+			var duration *time.Duration
+			if record.EndTime != nil {
+				duration = new(record.EndTime.Sub(record.StartTime))
+			}
 			execs = append(execs, ExecRecord{
 				Index:       record.Index,
 				CommandLine: record.CommandLine,
 				ExitCode:    record.ExitCode,
 				StartTime:   record.StartTime,
-				EndTime:     record.EndTime,
+				Duration:    duration,
 			})
 		}
 		recentExecs := &ExecRecords{
@@ -150,11 +154,11 @@ type ExecRecords struct {
 type ExecRecord struct {
 	XMLName xml.Name `xml:"exec"`
 
-	Index       int        `xml:"index,attr"`
-	CommandLine string     `xml:"cmdline"`
-	ExitCode    *int       `xml:"exit-code,omitempty"`
-	StartTime   time.Time  `xml:"start-time"`
-	EndTime     *time.Time `xml:"end-time,omitempty"`
+	Index       int            `xml:"index,attr"`
+	CommandLine string         `xml:"cmdline"`
+	ExitCode    *int           `xml:"exit-code,omitempty"`
+	StartTime   time.Time      `xml:"start-time"`
+	Duration    *time.Duration `xml:"duration,omitempty"`
 }
 
 // ChatTurnInput 对话输入
@@ -192,9 +196,25 @@ var ChatSystemPromptTpl = template.Must(template.New("ChatSystemPrompt").
 	Parse(`你是一个 shell 专家，负责解决用户关于 shell 的问题。
 
 ## 严格遵循以下要求进行回答
+
 - 以用户提问的语言回答问题，比如用户用中文提问就用中文回答，用户用英文提问就用英文回答；
 
+## 命令记录
+
+在用户每轮输入前可能有 ` + "`" + `<exec-records>` + "`" + ` XML 标记，其中是用户在和你对话期间执行的命令记录信息，包含用户该轮输入前、上轮输入后执行的最多 10 条命令（通过 GetHistory 可查询省略的命令）。
+
+每一个 ` + "`" + `<exec>` + "`" + ` 标记是一次命令执行，其中各字段含义：
+
+- ` + "`" + `<index>` + "`" + ` 命令序号
+- ` + "`" + `<cmdline>` + "`" + ` 命令行
+- ` + "`" + `<exit-code>` + "`" + ` 退出码
+- ` + "`" + `<start-time>` + "`" + ` 命令执行开始时间
+- ` + "`" + `<duration>` + "`" + ` 命令执行耗时
+
+这些命令记录中不会包含命令执行时的输出内容，如有必要可以通过 ReadExecOutput 使用命令 index 查询获取输出内容。
+
 ## 输出
+
 - 你的输出展示在 TERM={{ .TerminalType }} 的终端中；
 {{- if has .TerminalType (list "xterm-256color" "xterm-color" "xterm" "linux" "vt100" "ansi") }}
 - 当前终端支持 ANSI SGR 序列，积极使用它们提高输出可读性；
