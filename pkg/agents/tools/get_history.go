@@ -10,8 +10,12 @@ import (
 	"github.com/yhlooo/gosh/pkg/term"
 )
 
-// GetHistoryDesc 获取命令执行历史工具描述
-const GetHistoryDesc = `获取最近执行的命令历史。
+const (
+	// GetHistoryName 获取命令执行历史工具名
+	GetHistoryName = "GetHistory"
+
+	// GetHistoryDesc 获取命令执行历史工具描述
+	GetHistoryDesc = `获取最近执行的命令历史。
 
 通过 lastN 指定获取最近多少个命令，如无必要建议初始获取不超过 10 个历史命令。
 
@@ -22,6 +26,7 @@ const GetHistoryDesc = `获取最近执行的命令历史。
 
 因 shell 输出流解析问题， cmdline 中可能混杂部分输入提示符
 `
+)
 
 // GetHistoryInput 获取命令执行历史工具入参
 type GetHistoryInput struct {
@@ -116,5 +121,5 @@ type ToolGetHistory = *ai.ToolDef[GetHistoryInput, GetHistoryOutput]
 
 // DefineToolGetHistory 注册 GetHistory 工具
 func DefineToolGetHistory(g *genkit.Genkit, cc *term.CommandCollector) ToolGetHistory {
-	return genkit.DefineTool(g, "GetHistory", GetHistoryDesc, GetHistoryFn(cc))
+	return genkit.DefineTool(g, GetHistoryName, GetHistoryDesc, GetHistoryFn(cc))
 }

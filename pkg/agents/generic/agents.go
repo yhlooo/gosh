@@ -34,4 +34,12 @@ type Options struct {
 	ChatOutputStreamHandler ai.ModelStreamCallback
 	// Shell 控制器
 	ShellController ShellController
+	// 权限审批处理器
+	PermissionRequestHandler func(ctx context.Context, req PermissionRequest) bool
+}
+
+// PermissionRequest 权限请求
+type PermissionRequest struct {
+	Title       string
+	Description string
 }

@@ -6,7 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/creack/pty"
 	"github.com/firebase/genkit/go/ai"
+
+	agentsgeneric "github.com/yhlooo/gosh/pkg/agents/generic"
+	"github.com/yhlooo/gosh/pkg/ui/permissionrequests"
 )
 
 // agentOutputHandler 处理 Agent 输出
@@ -52,7 +57,7 @@ func (ctl *Controller) agentOutputHandler() func(ctx context.Context, chunk *ai.
 				_, _ = ctl.output.Write([]byte(fmt.Sprintf(
 					"%s\x1b[2;34mToolCall: %s %s\x1b[0m",
 					resetPrefix,
-					part.ToolRequest.Ref,
+					part.ToolRequest.Name,
 					inputRawStr,
 				)))
 
@@ -67,7 +72,7 @@ func (ctl *Controller) agentOutputHandler() func(ctx context.Context, chunk *ai.
 				_, _ = ctl.output.Write([]byte(fmt.Sprintf(
 					"%s\x1b[2;34m%s %s\x1b[0m",
 					resetPrefix,
-					strings.Repeat(" ", len(part.ToolResponse.Ref)+11),
+					strings.Repeat(" ", len(part.ToolResponse.Name)+11),
 					outputRawStr,
 				)))
 			}
@@ -75,4 +80,38 @@ func (ctl *Controller) agentOutputHandler() func(ctx context.Context, chunk *ai.
 
 		return nil
 	}
+}
+
+// handlePermissionRequest 处理权限请求
+func (ctl *Controller) handlePermissionRequest(_ context.Context, req agentsgeneric.PermissionRequest) bool {
+	pr := &permissionrequests.PermissionRequest{
+		Title:       req.Title,
+		Description: req.Description,
+	}
+
+	// 设置输入拦截器
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		ctl.logger.Error(err, "create permission request io error")
+		return false
+	}
+	ctl.inputLock.Lock()
+	ctl.inputInterceptor = ptmx
+	ctl.inputLock.Unlock()
+	defer func() {
+		ctl.inputLock.Lock()
+		ctl.inputInterceptor = nil
+		ctl.inputLock.Unlock()
+		_ = tty.Close()
+		_ = ptmx.Close()
+	}()
+
+	p := tea.NewProgram(pr, tea.WithInput(tty), tea.WithOutput(ctl.output))
+	_, _ = ctl.output.WriteString("\x1b[0m\r\n")
+	if _, err := p.Run(); err != nil {
+		ctl.logger.Error(err, "handle permission request error")
+		return false
+	}
+
+	return pr.Allowed()
 }

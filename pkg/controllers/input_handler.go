@@ -29,6 +29,11 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 		return len(p), nil
 	}
 
+	if ctl.inputInterceptor != nil {
+		// 全部转发到拦截器处理
+		return ctl.inputInterceptor.Write(p)
+	}
+
 	curState := (*Controller)(ctl).State()
 	for i, c := range p {
 		ctl.inputParser.Advance(c)

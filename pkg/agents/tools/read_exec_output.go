@@ -7,13 +7,18 @@ import (
 	"github.com/yhlooo/gosh/pkg/term"
 )
 
-// ReadExecOutputDesc 读取命令执行输出工具描述
-const ReadExecOutputDesc = `读取指定命令执行时 stdout/stderr 输出内容。
+const (
+	// ReadExecOutputName 读取命令执行输出工具名
+	ReadExecOutputName = "ReadExecOutput"
+
+	// ReadExecOutputDesc 读取命令执行输出工具描述
+	ReadExecOutputDesc = `读取指定命令执行时 stdout/stderr 输出内容。
 
 通过 index 指定需要查询输出的命令。
 
 每次读取内容不建议过多，通过 limit 和 offset 组合可以按需获取部分输出内容，建议每次读取不超过 8KiB (8192) 。
 `
+)
 
 // ReadExecOutputInput 读命令执行输出工具入参
 type ReadExecOutputInput struct {
@@ -55,5 +60,5 @@ type ToolReadExecOutput = *ai.ToolDef[ReadExecOutputInput, ReadExecOutputOutput]
 
 // DefineToolReadExecOutput 注册 ReadExecOutput 工具
 func DefineToolReadExecOutput(g *genkit.Genkit, cc *term.CommandCollector) ToolReadExecOutput {
-	return genkit.DefineTool(g, "ReadExecOutput", ReadExecOutputDesc, ReadExecOutputFn(cc))
+	return genkit.DefineTool(g, ReadExecOutputName, ReadExecOutputDesc, ReadExecOutputFn(cc))
 }

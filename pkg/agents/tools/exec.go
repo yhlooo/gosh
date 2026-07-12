@@ -11,8 +11,12 @@ import (
 	"github.com/yhlooo/gosh/pkg/agents/generic"
 )
 
-// ExecDesc 命令执行工具描述
-const ExecDesc = `在当前 shell 中执行命令。
+const (
+	// ExecName 命令执行工具名
+	ExecName = "Exec"
+
+	// ExecDesc 命令执行工具描述
+	ExecDesc = `在当前 shell 中执行命令。
 
 通过 cmdline 指定需要执行的命令行，注意需要符合当前 shell 语法。
 
@@ -24,10 +28,19 @@ const ExecDesc = `在当前 shell 中执行命令。
 
 执行的命令和命令执行时的输出内容会同步展示给用户。没有必要单纯复述这些内容给用户，如需提醒用户查看可以说“看上面的输出内容”。
 `
+)
 
 // ExecInput 命令执行工具输入
 type ExecInput struct {
 	CommandLine string `json:"cmdline" jsonschema_description:"执行的命令行"`
+}
+
+// PermissionRequest 权限请求
+func (in ExecInput) PermissionRequest() generic.PermissionRequest {
+	return generic.PermissionRequest{
+		Title:       "Exec Command",
+		Description: in.CommandLine,
+	}
 }
 
 // ExecOutput 命令执行工具输出
@@ -87,5 +100,5 @@ type ToolExec = *ai.ToolDef[ExecInput, ExecOutput]
 
 // DefineToolExec 注册 Exec 工具
 func DefineToolExec(g *genkit.Genkit, ctl generic.ShellController) ToolExec {
-	return genkit.DefineTool(g, "Exec", ExecDesc, ExecFn(ctl))
+	return genkit.DefineTool(g, ExecName, ExecDesc, ExecFn(ctl))
 }

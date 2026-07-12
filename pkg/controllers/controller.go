@@ -88,8 +88,9 @@ type Controller struct {
 	inAgentOutput bool
 	inExec        bool
 
-	inputBuff     *bytes.Buffer
-	agentInputBox *term.InputBox
+	inputInterceptor io.Writer
+	inputBuff        *bytes.Buffer
+	agentInputBox    *term.InputBox
 
 	commandCollector *term.CommandCollector
 }
@@ -145,9 +146,10 @@ func (ctl *Controller) Run(ctx context.Context) error {
 
 	// 初始化 Agent
 	if err = ctl.agent.Initialize(ctx, generic.Options{
-		TerminalType:            os.Getenv("TERM"),
-		ShellController:         ctl,
-		ChatOutputStreamHandler: ctl.agentOutputHandler(),
+		TerminalType:             os.Getenv("TERM"),
+		ShellController:          ctl,
+		ChatOutputStreamHandler:  ctl.agentOutputHandler(),
+		PermissionRequestHandler: ctl.handlePermissionRequest,
 	}); err != nil {
 		return fmt.Errorf("initialize agent error: %w", err)
 	}

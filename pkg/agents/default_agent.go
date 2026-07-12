@@ -58,6 +58,7 @@ type GoshAgent struct {
 
 	availableModels []models.ModelConfig
 	availableTools  []ai.ToolRef
+	allowTools      []string
 
 	currentModels models.Models
 	session       *Session
@@ -101,6 +102,12 @@ func (a *GoshAgent) Initialize(ctx context.Context, opts generic.Options) error 
 
 	for _, t := range a.availableTools {
 		logger.Info(fmt.Sprintf("registered tool: %s", t.Name()))
+	}
+
+	// 始终允许只读操作
+	a.allowTools = []string{
+		tools.GetHistoryName,
+		tools.ReadExecOutputName,
 	}
 
 	// 注册 flows

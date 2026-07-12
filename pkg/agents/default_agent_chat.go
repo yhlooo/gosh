@@ -16,6 +16,7 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/go-logr/logr"
 
+	"github.com/yhlooo/gosh/pkg/agents/tools"
 	"github.com/yhlooo/gosh/pkg/genkitplugins/oai"
 	"github.com/yhlooo/gosh/pkg/models"
 	"github.com/yhlooo/gosh/pkg/tokentracker"
@@ -235,6 +236,8 @@ func (a *GoshAgent) makeChatSystemPrompt() (string, error) {
 
 // handleChatTurn 处理一轮对话
 func (a *GoshAgent) handleChatTurn(ctx context.Context, in ChatTurnInput) (ChatTurnOutput, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+
 	systemPrompt, err := a.makeChatSystemPrompt()
 	if err != nil {
 		return ChatTurnOutput{}, fmt.Errorf("make system prompt error: %w", err)
@@ -293,6 +296,24 @@ func (a *GoshAgent) handleChatTurn(ctx context.Context, in ChatTurnInput) (ChatT
 		// 调用工具
 		var parts []*ai.Part
 		for _, toolReq := range toolRequests {
+			// 权限审批
+			if a.genericOpts.PermissionRequestHandler != nil && !slices.Contains(a.allowTools, toolReq.Name) {
+				if ok := a.genericOpts.PermissionRequestHandler(ctx, tools.PermissionRequestForToolRequest(toolReq)); !ok {
+					logger.V(1).Info(fmt.Sprintf("tool call %q %q denied", toolReq.Name, toolReq.Ref))
+					toolResp := ai.NewToolResponsePart(&ai.ToolResponse{
+						Name:   toolReq.Name,
+						Ref:    toolReq.Ref,
+						Output: ToolCallError{Err: "user refused"},
+					})
+
+					// 用户拒绝执行工具，结束对话
+					parts = append(parts, toolResp)
+					output.Messages = append(output.Messages, ai.NewMessage(ai.RoleTool, nil, parts...))
+					return output, nil
+				}
+				logger.V(1).Info(fmt.Sprintf("tool call %q %q allowed", toolReq.Name, toolReq.Ref))
+			}
+
 			if err := a.handleChatOutputStream(ctx, &ai.ModelResponseChunk{
 				Content: []*ai.Part{ai.NewToolRequestPart(toolReq)},
 				Role:    resp.Message.Role,
