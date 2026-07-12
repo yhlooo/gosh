@@ -21,7 +21,10 @@ builds:
 
 archives:
   - format: "tar.gz"
-    name_template: "{{ .Binary }}-v{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    name_template: "{{ .Binary }}-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
 
 dockers_v2:
   - id: gosh-image
