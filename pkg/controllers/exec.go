@@ -23,7 +23,7 @@ func (ctl *Controller) ExecuteCommand(ctx context.Context, cmdline string) (*ter
 	// 发送命令
 	// Ctrl+U Ctrl+K cmdline Enter
 	ctl.inputLock.Lock()
-	if _, err := ctl.ptmx.WriteString("\x15\v" + cmdline + "\r"); err != nil {
+	if _, err := ctl.shellPtmx.WriteString("\x15\v" + cmdline + "\r"); err != nil {
 		ctl.inputLock.Unlock()
 		return nil, fmt.Errorf("send cmdline to shell error: %w", err)
 	}

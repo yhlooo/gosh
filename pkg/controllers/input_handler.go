@@ -66,12 +66,12 @@ func (ctl *InputHandler) writeUpstream(p []byte) (n int, err error) {
 	state := (*Controller)(ctl).State()
 	switch state {
 	case Shell, Exec:
-		return ctl.ptmx.Write(p)
+		return ctl.shellPtmx.Write(p)
 	case AgentInput:
 		return ctl.agentInputBox.Write(p)
 	case AgentOutput:
 		// 此时没有上游，忽略输入
-		return len(p), nil
+		return ctl.agentPtmx.Write(p)
 	default:
 		return 0, fmt.Errorf("unknown input mode: %d", state)
 	}

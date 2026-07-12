@@ -78,7 +78,10 @@ type Controller struct {
 	logger       logr.Logger
 	agent        generic.Agent
 	cmd          *exec.Cmd
-	ptmx         *os.File
+	agentPtmx    *os.File
+	agentTTY     *os.File
+	shellPtmx    *os.File
+	input        *os.File
 	output       *os.File
 	inputParser  *ansi.Parser
 	outputParser *ansi.Parser
@@ -161,13 +164,23 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		ctl.cmd.Env = append(ctl.cmd.Env, ctl.opts.Env...)
 	}
 
-	// 设置输入输出流并启动 shell
-	ctl.ptmx, err = pty.Start(ctl.cmd)
+	// 设置 agent 输入输出流
+	ctl.agentPtmx, ctl.agentTTY, err = pty.Open()
+	if err != nil {
+		return fmt.Errorf("open agent pty error: %w", err)
+	}
+	defer func() {
+		_ = ctl.agentPtmx.Close()
+		_ = ctl.agentTTY.Close()
+	}()
+
+	// 设置 shell 输入输出流并启动 shell
+	ctl.shellPtmx, err = pty.Start(ctl.cmd)
 	if err != nil {
 		return fmt.Errorf("start %q error: %w", ctl.cmd.Args, err)
 	}
 	defer func() {
-		_ = ctl.ptmx.Close()
+		_ = ctl.shellPtmx.Close()
 		if ctl.cmd.Process != nil {
 			_ = ctl.cmd.Process.Kill()
 		}
@@ -178,7 +191,10 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	signal.Notify(winchCh, syscall.SIGWINCH)
 	go func() {
 		for range winchCh {
-			if err := pty.InheritSize(os.Stdin, ctl.ptmx); err != nil {
+			if err := pty.InheritSize(os.Stdin, ctl.shellPtmx); err != nil {
+				logger.Error(err, "resize pty error")
+			}
+			if err := pty.InheritSize(os.Stdin, ctl.agentPtmx); err != nil {
 				logger.Error(err, "resize pty error")
 			}
 			rows, cols, _ := pty.Getsize(os.Stdin)
@@ -191,16 +207,17 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		close(winchCh)
 	}()
 
+	ctl.input = os.Stdin
 	ctl.output = os.Stdout
 	ctl.agentInputBox = term.NewInputBox(ctl.output)
 
 	ctl.inputParser = ansi.NewParser()
 	ctl.inputParser.SetHandler(ctl.InputHandler().ParseHandler())
-	ptyInW := io.Writer(ctl.InputHandler())
+	inW := io.Writer(ctl.InputHandler())
 
 	ctl.outputParser = ansi.NewParser()
-	ctl.outputParser.SetHandler(ctl.OutputHandler().ParseHandler())
-	ptyOutW := io.Writer(ctl.OutputHandler())
+	ctl.outputParser.SetHandler(ctl.ShellOutputHandler().ParseHandler())
+	shellOutW := io.Writer(ctl.ShellOutputHandler())
 
 	if ctl.opts.TraceIO {
 		inRawFilePath := filepath.Join(ctl.opts.SessionDir, TraceInputRawFile)
@@ -209,7 +226,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 			return fmt.Errorf("open input trace file %q error: %w", inRawFilePath, err)
 		}
 		defer func() { _ = inRawFile.Close() }()
-		ptyInW = io.MultiWriter(ptyInW, inRawFile)
+		inW = io.MultiWriter(inW, inRawFile)
 
 		outRawFilePath := filepath.Join(ctl.opts.SessionDir, TraceOutputRawFile)
 		outRawFile, err := os.OpenFile(outRawFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
@@ -217,7 +234,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 			return fmt.Errorf("open output trace file %q error: %w", inRawFilePath, err)
 		}
 		defer func() { _ = outRawFile.Close() }()
-		ptyOutW = io.MultiWriter(ptyOutW, outRawFile)
+		shellOutW = io.MultiWriter(shellOutW, outRawFile)
 	}
 
 	// 设置输入流为 raw 格式
@@ -239,17 +256,17 @@ func (ctl *Controller) Run(ctx context.Context) error {
 		if err != nil {
 			ctl.logger.Error(err, "init init shell error")
 			_, _ = ctl.output.WriteString(fmt.Sprintf("\x1b[31mInit shell error: %s\x1b0m\r\n", err.Error()))
-			_ = ctl.ptmx.Close()
+			_ = ctl.shellPtmx.Close()
 			return
 		}
 		if initCmd != "" {
-			if _, err := ctl.ptmx.Write([]byte(initCmd + "\r")); err != nil {
+			if _, err := ctl.shellPtmx.Write([]byte(initCmd + "\r")); err != nil {
 				ctl.logger.Error(err, "send init command error")
 				_, _ = ctl.output.WriteString(fmt.Sprintf(
 					"\x1b[31mInit shell error: send init command error: %s\x1b0m\r\n",
 					err.Error(),
 				))
-				_ = ctl.ptmx.Close()
+				_ = ctl.shellPtmx.Close()
 				return
 			}
 		}
@@ -261,14 +278,19 @@ func (ctl *Controller) Run(ctx context.Context) error {
 			_, _ = ctl.output.WriteString(fmt.Sprintf(
 				"\x1b[31mInit shell error: enable shell integration failed\x1b0m\r\n",
 			))
-			_ = ctl.ptmx.Close()
+			_ = ctl.shellPtmx.Close()
 			return
 		}
 	}()
 
-	// 转发 shell 输入输出
-	go func() { _, _ = io.Copy(ptyInW, os.Stdin) }()
-	_, _ = io.Copy(ptyOutW, ctl.ptmx)
+	// 转发输入
+	go func() { _, _ = io.Copy(inW, ctl.input) }()
+
+	// 转发 agent 输出
+	go func() { _, _ = io.Copy(ctl.output, ctl.agentPtmx) }()
+
+	// 转发 shell 输出
+	_, _ = io.Copy(shellOutW, ctl.shellPtmx)
 
 	return nil
 }

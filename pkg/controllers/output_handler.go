@@ -8,18 +8,18 @@ import (
 	"github.com/yhlooo/gosh/pkg/term"
 )
 
-// OutputHandler 返回作为输出处理器的控制器
-func (ctl *Controller) OutputHandler() *OutputHandler {
-	return (*OutputHandler)(ctl)
+// ShellOutputHandler 返回作为输出处理器的控制器
+func (ctl *Controller) ShellOutputHandler() *ShellOutputHandler {
+	return (*ShellOutputHandler)(ctl)
 }
 
-// OutputHandler 输出处理器
-type OutputHandler Controller
+// ShellOutputHandler 输出处理器
+type ShellOutputHandler Controller
 
-var _ io.Writer = (*OutputHandler)(nil)
+var _ io.Writer = (*ShellOutputHandler)(nil)
 
 // Write 处理 pty 输出的内容
-func (ctl *OutputHandler) Write(p []byte) (n int, err error) {
+func (ctl *ShellOutputHandler) Write(p []byte) (n int, err error) {
 	ctl.outputLock.Lock()
 	defer ctl.outputLock.Unlock()
 
@@ -60,6 +60,6 @@ func (ctl *OutputHandler) Write(p []byte) (n int, err error) {
 }
 
 // ParseHandler 返回解析 ANSI 序列处理器
-func (ctl *OutputHandler) ParseHandler() ansi.Handler {
+func (ctl *ShellOutputHandler) ParseHandler() ansi.Handler {
 	return ansi.Handler{}
 }

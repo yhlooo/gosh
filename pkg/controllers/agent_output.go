@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/creack/pty"
 	"github.com/firebase/genkit/go/ai"
 
 	agentsgeneric "github.com/yhlooo/gosh/pkg/agents/generic"
@@ -89,24 +88,7 @@ func (ctl *Controller) handlePermissionRequest(_ context.Context, req agentsgene
 		Description: req.Description,
 	}
 
-	// 设置输入拦截器
-	ptmx, tty, err := pty.Open()
-	if err != nil {
-		ctl.logger.Error(err, "create permission request io error")
-		return false
-	}
-	ctl.inputLock.Lock()
-	ctl.inputInterceptor = ptmx
-	ctl.inputLock.Unlock()
-	defer func() {
-		ctl.inputLock.Lock()
-		ctl.inputInterceptor = nil
-		ctl.inputLock.Unlock()
-		_ = tty.Close()
-		_ = ptmx.Close()
-	}()
-
-	p := tea.NewProgram(pr, tea.WithInput(tty), tea.WithOutput(ctl.output))
+	p := tea.NewProgram(pr, tea.WithInput(ctl.agentTTY), tea.WithOutput(ctl.agentTTY))
 	_, _ = ctl.output.WriteString("\x1b[0m\r\n")
 	if _, err := p.Run(); err != nil {
 		ctl.logger.Error(err, "handle permission request error")
