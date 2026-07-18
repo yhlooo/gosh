@@ -43,6 +43,9 @@ type Options struct {
 
 	// Agent
 	Agent generic.Agent
+
+	// 输入提示
+	Prompt string
 }
 
 // Validate 校验选项
@@ -86,14 +89,16 @@ type Controller struct {
 	inputParser  *ansi.Parser
 	outputParser *ansi.Parser
 
-	ready         bool
-	inAgent       bool
-	inAgentOutput bool
-	inExec        bool
+	ready            bool
+	inAgent          bool
+	inAgentOutput    bool
+	inExec           bool
+	wroteExtraPrompt bool
 
 	inputInterceptor io.Writer
 	inputBuff        *bytes.Buffer
 	agentInputBox    *term.InputBox
+	deferOutput      *bytes.Buffer
 
 	commandCollector *term.CommandCollector
 }
@@ -146,6 +151,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 	}
 
 	ctl.inputBuff = &bytes.Buffer{}
+	ctl.deferOutput = &bytes.Buffer{}
 
 	// 初始化 Agent
 	if err = ctl.agent.Initialize(ctx, generic.Options{

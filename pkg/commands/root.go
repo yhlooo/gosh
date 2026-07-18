@@ -261,6 +261,7 @@ func run(ctx context.Context, opts Options) error {
 			DefaultModels:    m,
 			MaxContextWindow: cfg.MaxContextWindow,
 		}),
+		Prompt: "\x1b[35;1mGOSH\x1b[0m\r\n",
 	})
 	if err != nil {
 		return err

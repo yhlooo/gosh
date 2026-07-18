@@ -26,6 +26,10 @@ func (ctl *ShellOutputHandler) Write(p []byte) (n int, err error) {
 	for i, c := range p {
 		ctl.outputParser.Advance(c)
 
+		writeExtraPrompt := ctl.commandCollector.State() == term.OutputPrompt &&
+			!ctl.wroteExtraPrompt &&
+			c != '\r' && c != '\n'
+
 		writeData := []byte{c}
 		if _, err := ctl.commandCollector.Write(writeData); err != nil {
 			return i, err
@@ -51,8 +55,16 @@ func (ctl *ShellOutputHandler) Write(p []byte) (n int, err error) {
 			// Agent 输出期间隐藏 prompt
 			continue
 		}
+
+		if writeExtraPrompt {
+			ctl.writeExtraPrompt()
+		}
 		if _, err := ctl.output.Write(writeData); err != nil {
 			return i, err
+		}
+		if ctl.deferOutput.Len() > 0 {
+			_, _ = ctl.output.Write(ctl.deferOutput.Bytes())
+			ctl.deferOutput.Reset()
 		}
 	}
 
@@ -61,5 +73,37 @@ func (ctl *ShellOutputHandler) Write(p []byte) (n int, err error) {
 
 // ParseHandler 返回解析 ANSI 序列处理器
 func (ctl *ShellOutputHandler) ParseHandler() ansi.Handler {
-	return ansi.Handler{}
+	return ansi.Handler{
+		HandleOsc: ctl.handleOSC,
+	}
+}
+
+// handleOSC 处理 OSC 序列
+func (ctl *ShellOutputHandler) handleOSC(cmd int, data []byte) {
+	switch cmd {
+	case 133:
+		if len(data) < 5 {
+			return
+		}
+		switch string(data[:5]) {
+		case "133;A":
+			// 提示符开始
+			ctl.wroteExtraPrompt = false
+		case "133;B":
+			// 命令开始
+			if !ctl.wroteExtraPrompt {
+				ctl.writeExtraPrompt()
+			}
+		case "133;C":
+			// 命令开始执行
+		case "133;D":
+			// 命令执行结束
+		}
+	}
+}
+
+// writeExtraPrompt 写额外的输入提示符
+func (ctl *ShellOutputHandler) writeExtraPrompt() {
+	_, _ = ctl.output.WriteString(ctl.opts.Prompt)
+	ctl.wroteExtraPrompt = true
 }

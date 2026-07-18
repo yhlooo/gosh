@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -126,7 +127,7 @@ func (ctl *InputHandler) handleExecute(b byte) {
 		ctl.inAgent = false
 		ctl.agentInputBox.Deactivate()
 		ctl.agentInputBox.Reset()
-		_, _ = ctl.output.Write(ctl.commandCollector.CurrentPromptAndCommand())
+		ctl.resumePromptAndCommand()
 	}
 }
 
@@ -142,8 +143,19 @@ func (ctl *InputHandler) handleCSI(cmd ansi.Cmd, _ ansi.Params) {
 			ctl.inAgent = false
 			ctl.agentInputBox.Deactivate()
 			ctl.agentInputBox.Reset()
-			_, _ = ctl.output.Write(ctl.commandCollector.CurrentPromptAndCommand())
+			ctl.resumePromptAndCommand()
 		default:
 		}
 	}
+}
+
+var promptPrefixRegexp = regexp.MustCompile(`(^(?:\x1b]133;A(?:;[0-9a-zA-Z=]+)*(?:\a|\x1b\\))?[\r\n]*)([^\r\n])`)
+
+// resumePromptAndCommand 还原输入提示和未提交的命令
+func (ctl *InputHandler) resumePromptAndCommand() {
+	content := ctl.commandCollector.CurrentPromptAndCommand()
+	if promptPrefixRegexp.Match(content) {
+		content = promptPrefixRegexp.ReplaceAll(content, []byte("${1}"+ctl.opts.Prompt+"${2}"))
+	}
+	_, _ = ctl.output.Write(content)
 }
