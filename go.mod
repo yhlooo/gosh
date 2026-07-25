@@ -6,12 +6,14 @@ require (
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/huh/v2 v2.0.3
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/bep/debounce v1.2.1
 	github.com/bombsimon/logrusr/v4 v4.1.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/creack/pty v1.1.24
 	github.com/danielgatis/go-headless-term v1.0.9
 	github.com/firebase/genkit/go v1.8.0
 	github.com/go-logr/logr v1.4.3
+	github.com/mattn/go-runewidth v0.0.27
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/openai/openai-go v1.12.0
 	github.com/shopspring/decimal v1.4.0
@@ -58,7 +60,6 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
-	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/mbleigh/raymond v0.0.0-20250414171441-6b3a58ab9e0a // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect

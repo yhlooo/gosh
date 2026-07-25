@@ -413,3 +413,22 @@ func (cc *CommandCollector) State() OutputState {
 	defer cc.lock.RUnlock()
 	return cc.state
 }
+
+// CursorPos 获取当前光标位置
+func (cc *CommandCollector) CursorPos() (row, col int) {
+	return cc.cmdBuff.CursorPos()
+}
+
+// IsAtLineEnd 判断光标是否正在行尾
+func (cc *CommandCollector) IsAtLineEnd() bool {
+	row, col := cc.cmdBuff.CursorPos()
+	cols := cc.cmdBuff.Cols()
+	for i := col; i < cols; i++ {
+		cell := cc.cmdBuff.Cell(row, i)
+		if cell != nil && cell.Char != 0 && cell.Char != ' ' {
+			cc.logger.Info(fmt.Sprintf("cell: %q, %d", string(cell.Char), i))
+			return false
+		}
+	}
+	return true
+}

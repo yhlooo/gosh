@@ -1,9 +1,12 @@
 package controllers
 
 import (
+	"fmt"
 	"io"
+	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/yhlooo/gosh/pkg/term"
 )
@@ -39,6 +42,9 @@ func (ctl *ShellOutputHandler) Write(p []byte) (n int, err error) {
 		switch ccState {
 		case term.OutputOthers, term.OutputPrompt, term.OutputCommand:
 			ctl.inExec = false
+			ctl.cleanCommandSuggestion()
+			ctl.outputDebounced(ctl.suggestCommand)
+
 		case term.OutputCommandExec:
 			ctl.inExec = true
 		}
@@ -106,4 +112,45 @@ func (ctl *ShellOutputHandler) handleOSC(cmd int, data []byte) {
 func (ctl *ShellOutputHandler) writeExtraPrompt() {
 	_, _ = ctl.output.WriteString(ctl.opts.Prompt)
 	ctl.wroteExtraPrompt = true
+}
+
+// suggestCommand 进行命令建议
+func (ctl *ShellOutputHandler) suggestCommand() {
+	ctl.outputLock.Lock()
+	defer ctl.outputLock.Unlock()
+
+	if ctl.commandCollector.State() != term.OutputCommand {
+		// 不处于输入命令状态，忽略
+		return
+	}
+	if ctl.commandSuggested {
+		// 已经建议过了
+		return
+	}
+
+	if !ctl.commandCollector.IsAtLineEnd() {
+		// 不在行尾不建议
+		return
+	}
+
+	// TODO: 建议内容生成有待实现，写个固定内容
+	content := "TODO not implemented你好🐮🐮"
+	content = strings.ReplaceAll(content, "\x1b", "")
+	content = strings.ReplaceAll(content, "\r", " ")
+	content = strings.ReplaceAll(content, "\n", " ")
+	_, _ = ctl.output.WriteString(fmt.Sprintf(
+		"\x1b[2m%s\x1b[22m\x1b[%dD",
+		content, runewidth.StringWidth(content),
+	))
+	ctl.commandSuggested = true
+}
+
+// cleanCommandSuggestion 清除命令建议
+func (ctl *ShellOutputHandler) cleanCommandSuggestion() {
+	if !ctl.commandSuggested {
+		// 没有建议
+		return
+	}
+	_, _ = ctl.output.WriteString("\x1b[K")
+	ctl.commandSuggested = false
 }
