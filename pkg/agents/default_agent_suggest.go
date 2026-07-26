@@ -24,7 +24,7 @@ func (a *GoshAgent) GenCmdlineSuggestion(ctx context.Context) (string, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 
 	curIndex := a.commandCollector.LastCommandIndex()
-	prefix := string(a.commandCollector.CurrentCommand())
+	prefix := a.commandCollector.CurrentCommand()
 
 	// 首先从缓存获取
 	suggestion, ok := a.cmdlineSuggestionCache.Get(curIndex, prefix)

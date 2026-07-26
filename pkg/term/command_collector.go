@@ -197,8 +197,8 @@ func (cc *CommandCollector) CurrentPromptAndCommand() []byte {
 }
 
 // CurrentCommand 返回当前未提交的命令
-func (cc *CommandCollector) CurrentCommand() []byte {
-	return bytes.Clone(cc.cmdBuff.RecordedData())
+func (cc *CommandCollector) CurrentCommand() string {
+	return cc.cmdBuff.String()
 }
 
 // parseHandler 返回 ANSI 解析处理器
@@ -431,7 +431,6 @@ func (cc *CommandCollector) IsAtLineEnd() bool {
 	for i := col; i < cols; i++ {
 		cell := cc.cmdBuff.Cell(row, i)
 		if cell != nil && cell.Char != 0 && cell.Char != ' ' {
-			cc.logger.Info(fmt.Sprintf("cell: %q, %d", string(cell.Char), i))
 			return false
 		}
 	}

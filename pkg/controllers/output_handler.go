@@ -122,7 +122,7 @@ func (ctl *ShellOutputHandler) writeCmdlineSuggestion() {
 		return
 	}
 
-	curCmdline := string(ctl.commandCollector.CurrentCommand())
+	curCmdline := ctl.commandCollector.CurrentCommand()
 
 	// 生成建议内容
 	content, err := ctl.agent.GenCmdlineSuggestion(ctl.ctx)
@@ -142,7 +142,7 @@ func (ctl *ShellOutputHandler) writeCmdlineSuggestion() {
 	if ctl.commandCollector.State() != term.OutputCommand || // 不处于输入命令状态，忽略
 		ctl.cmdlineSuggestion != "" || // 已经建议过了
 		!ctl.commandCollector.IsAtLineEnd() || // 不在行尾不建议
-		curCmdline != string(ctl.commandCollector.CurrentCommand()) { // 生成建议期间输入内容发生了变化
+		curCmdline != ctl.commandCollector.CurrentCommand() { // 生成建议期间输入内容发生了变化
 		return
 	}
 
