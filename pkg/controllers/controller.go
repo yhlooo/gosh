@@ -90,12 +90,12 @@ type Controller struct {
 	inputParser  *ansi.Parser
 	outputParser *ansi.Parser
 
-	ready            bool
-	inAgent          bool
-	inAgentOutput    bool
-	inExec           bool
-	wroteExtraPrompt bool
-	commandSuggested bool
+	ready                 bool
+	inAgent               bool
+	inAgentOutput         bool
+	inExec                bool
+	wroteExtraPrompt      bool
+	showCmdlineSuggestion bool
 
 	inputInterceptor io.Writer
 	inputBuff        *bytes.Buffer

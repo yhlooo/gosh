@@ -42,8 +42,8 @@ func (ctl *ShellOutputHandler) Write(p []byte) (n int, err error) {
 		switch ccState {
 		case term.OutputOthers, term.OutputPrompt, term.OutputCommand:
 			ctl.inExec = false
-			ctl.cleanCommandSuggestion()
-			ctl.outputDebounced(ctl.suggestCommand)
+			ctl.cleanCmdlineSuggestion()
+			ctl.outputDebounced(ctl.writeCmdlineSuggestion)
 
 		case term.OutputCommandExec:
 			ctl.inExec = true
@@ -114,8 +114,8 @@ func (ctl *ShellOutputHandler) writeExtraPrompt() {
 	ctl.wroteExtraPrompt = true
 }
 
-// suggestCommand 进行命令建议
-func (ctl *ShellOutputHandler) suggestCommand() {
+// writeCmdlineSuggestion 写命令行建议
+func (ctl *ShellOutputHandler) writeCmdlineSuggestion() {
 	ctl.outputLock.Lock()
 	defer ctl.outputLock.Unlock()
 
@@ -123,7 +123,7 @@ func (ctl *ShellOutputHandler) suggestCommand() {
 		// 不处于输入命令状态，忽略
 		return
 	}
-	if ctl.commandSuggested {
+	if ctl.showCmdlineSuggestion {
 		// 已经建议过了
 		return
 	}
@@ -142,15 +142,15 @@ func (ctl *ShellOutputHandler) suggestCommand() {
 		"\x1b[2m%s\x1b[22m\x1b[%dD",
 		content, runewidth.StringWidth(content),
 	))
-	ctl.commandSuggested = true
+	ctl.showCmdlineSuggestion = true
 }
 
-// cleanCommandSuggestion 清除命令建议
-func (ctl *ShellOutputHandler) cleanCommandSuggestion() {
-	if !ctl.commandSuggested {
+// cleanCmdlineSuggestion 清除命令建议
+func (ctl *ShellOutputHandler) cleanCmdlineSuggestion() {
+	if !ctl.showCmdlineSuggestion {
 		// 没有建议
 		return
 	}
 	_, _ = ctl.output.WriteString("\x1b[K")
-	ctl.commandSuggested = false
+	ctl.showCmdlineSuggestion = false
 }
