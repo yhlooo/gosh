@@ -116,25 +116,35 @@ func (ctl *ShellOutputHandler) writeExtraPrompt() {
 
 // writeCmdlineSuggestion 写命令行建议
 func (ctl *ShellOutputHandler) writeCmdlineSuggestion() {
+	if ctl.commandCollector.State() != term.OutputCommand || // 不处于输入命令状态，忽略
+		ctl.cmdlineSuggestion != "" || // 已经建议过了
+		!ctl.commandCollector.IsAtLineEnd() { // 不在行尾不建议
+		return
+	}
+
+	curCmdline := string(ctl.commandCollector.CurrentCommand())
+
+	// 生成建议内容
+	content, err := ctl.agent.GenerateCommandLineSuggestion(ctl.ctx)
+	if err != nil {
+		ctl.logger.Error(err, "generate cmdline suggestion error")
+		return
+	}
+	if content == "" {
+		return
+	}
+
 	ctl.outputLock.Lock()
 	defer ctl.outputLock.Unlock()
 
-	if ctl.commandCollector.State() != term.OutputCommand {
-		// 不处于输入命令状态，忽略
-		return
-	}
-	if ctl.showCmdlineSuggestion {
-		// 已经建议过了
-		return
-	}
-
-	if !ctl.commandCollector.IsAtLineEnd() {
-		// 不在行尾不建议
+	// 生成完重新检查一遍
+	if ctl.commandCollector.State() != term.OutputCommand || // 不处于输入命令状态，忽略
+		ctl.cmdlineSuggestion != "" || // 已经建议过了
+		!ctl.commandCollector.IsAtLineEnd() || // 不在行尾不建议
+		curCmdline != string(ctl.commandCollector.CurrentCommand()) { // 生成建议期间输入内容发生了变化
 		return
 	}
 
-	// TODO: 建议内容生成有待实现，写个固定内容
-	content := "TODO not implemented你好🐮🐮"
 	content = strings.ReplaceAll(content, "\x1b", "")
 	content = strings.ReplaceAll(content, "\r", " ")
 	content = strings.ReplaceAll(content, "\n", " ")
@@ -142,15 +152,15 @@ func (ctl *ShellOutputHandler) writeCmdlineSuggestion() {
 		"\x1b[2m%s\x1b[22m\x1b[%dD",
 		content, runewidth.StringWidth(content),
 	))
-	ctl.showCmdlineSuggestion = true
+	ctl.cmdlineSuggestion = content
 }
 
 // cleanCmdlineSuggestion 清除命令建议
 func (ctl *ShellOutputHandler) cleanCmdlineSuggestion() {
-	if !ctl.showCmdlineSuggestion {
+	if ctl.cmdlineSuggestion == "" {
 		// 没有建议
 		return
 	}
 	_, _ = ctl.output.WriteString("\x1b[K")
-	ctl.showCmdlineSuggestion = false
+	ctl.cmdlineSuggestion = ""
 }

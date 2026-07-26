@@ -90,12 +90,12 @@ type Controller struct {
 	inputParser  *ansi.Parser
 	outputParser *ansi.Parser
 
-	ready                 bool
-	inAgent               bool
-	inAgentOutput         bool
-	inExec                bool
-	wroteExtraPrompt      bool
-	showCmdlineSuggestion bool
+	ready             bool
+	inAgent           bool
+	inAgentOutput     bool
+	inExec            bool
+	wroteExtraPrompt  bool
+	cmdlineSuggestion string
 
 	inputInterceptor io.Writer
 	inputBuff        *bytes.Buffer
@@ -155,7 +155,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 
 	ctl.inputBuff = &bytes.Buffer{}
 	ctl.deferOutput = &bytes.Buffer{}
-	ctl.outputDebounced = debounce.New(200 * time.Millisecond)
+	ctl.outputDebounced = debounce.New(1000 * time.Millisecond)
 
 	// 初始化 Agent
 	if err = ctl.agent.Initialize(ctx, generic.Options{

@@ -189,11 +189,16 @@ func (cc *CommandCollector) Resize(rows, cols int) {
 	cc.cmdBuff.Resize(rows, cols)
 }
 
-// CurrentPromptAndCommand 当前输入提示和输入的命令
+// CurrentPromptAndCommand 当前输入提示和未提交的命令
 func (cc *CommandCollector) CurrentPromptAndCommand() []byte {
 	cc.lock.RLock()
 	defer cc.lock.RUnlock()
 	return append(bytes.Clone(cc.promptBuff.Bytes()), cc.cmdBuff.RecordedData()...)
+}
+
+// CurrentCommand 返回当前未提交的命令
+func (cc *CommandCollector) CurrentCommand() []byte {
+	return bytes.Clone(cc.cmdBuff.RecordedData())
 }
 
 // parseHandler 返回 ANSI 解析处理器
