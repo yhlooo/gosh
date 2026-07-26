@@ -125,11 +125,12 @@ func (ctl *ShellOutputHandler) writeCmdlineSuggestion() {
 	curCmdline := string(ctl.commandCollector.CurrentCommand())
 
 	// 生成建议内容
-	content, err := ctl.agent.GenerateCommandLineSuggestion(ctl.ctx)
+	content, err := ctl.agent.GenCmdlineSuggestion(ctl.ctx)
 	if err != nil {
 		ctl.logger.Error(err, "generate cmdline suggestion error")
 		return
 	}
+	ctl.logger.V(1).Info(fmt.Sprintf("cmdline suggestion: %q, prefix: %q", content, curCmdline))
 	if content == "" {
 		return
 	}

@@ -4,6 +4,8 @@ package models
 type Models struct {
 	// 主模型，用于回答用户问题
 	Primary string `json:"primary,omitempty"`
+	// 轻量模型，用于快速响应场景
+	Lite string `json:"lite,omitempty"`
 	// 视觉模型，用于处理图片理解任务
 	Vision string `json:"vision,omitempty"`
 	// 思考级别
@@ -12,6 +14,14 @@ type Models struct {
 
 // GetPrimary 获取主模型
 func (m Models) GetPrimary() string {
+	return m.Primary
+}
+
+// GetLite 获取轻量模型
+func (m Models) GetLite() string {
+	if m.Lite != "" {
+		return m.Lite
+	}
 	return m.Primary
 }
 
