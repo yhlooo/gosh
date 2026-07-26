@@ -24,6 +24,10 @@ Actually it is not a shell, but an enhanced wrapper for shells like zsh / bash. 
 		ID:    "commands.OptsModelDesc",
 		Other: "Primary model for the current session",
 	}
+	MsgOptsLiteModelDesc = &i18n.Message{
+		ID:    "commands.OptsLiteModelDesc",
+		Other: "Lite model for the current session",
+	}
 	MsgOptsVisionModelDesc = &i18n.Message{
 		ID:    "commands.OptsVisionModelDesc",
 		Other: "Vision model for the current session",

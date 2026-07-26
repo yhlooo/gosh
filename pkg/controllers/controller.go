@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bep/debounce"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"github.com/go-logr/logr"
@@ -89,16 +90,18 @@ type Controller struct {
 	inputParser  *ansi.Parser
 	outputParser *ansi.Parser
 
-	ready            bool
-	inAgent          bool
-	inAgentOutput    bool
-	inExec           bool
-	wroteExtraPrompt bool
+	ready             bool
+	inAgent           bool
+	inAgentOutput     bool
+	inExec            bool
+	wroteExtraPrompt  bool
+	cmdlineSuggestion string
 
 	inputInterceptor io.Writer
 	inputBuff        *bytes.Buffer
 	agentInputBox    *term.InputBox
 	deferOutput      *bytes.Buffer
+	outputDebounced  func(func())
 
 	commandCollector *term.CommandCollector
 }
@@ -152,6 +155,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 
 	ctl.inputBuff = &bytes.Buffer{}
 	ctl.deferOutput = &bytes.Buffer{}
+	ctl.outputDebounced = debounce.New(1000 * time.Millisecond)
 
 	// 初始化 Agent
 	if err = ctl.agent.Initialize(ctx, generic.Options{
@@ -282,7 +286,7 @@ func (ctl *Controller) Run(ctx context.Context) error {
 			// 开启 Shell Integration
 			ctl.logger.Info("enable shell integration failed")
 			_, _ = ctl.output.WriteString(fmt.Sprintf(
-				"\x1b[31mInit shell error: enable shell integration failed\x1b0m\r\n",
+				"\x1b[31mInit shell error: enable shell integration failed\x1b[0m\r\n",
 			))
 			_ = ctl.shellPtmx.Close()
 			return

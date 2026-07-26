@@ -264,23 +264,13 @@ func (a *GoshAgent) handleChatTurn(ctx context.Context, in ChatTurnInput) (ChatT
 	}
 
 	opts := []ai.GenerateOption{
+		ai.WithModelName(a.currentModels.GetPrimary()),
+		ai.WithConfig(oai.GenerateConfig{ReasoningLevel: a.currentModels.GetReasoningLevel()}),
 		ai.WithSystem(systemPrompt),
 		ai.WithReturnToolRequests(true),
-		ai.WithUse(tokentracker.TrackerFromContext(ctx).Middleware()),
+		ai.WithUse(a.tokenTracker.Middleware()),
 		ai.WithStreaming(handleTextStream(a.handleChatOutputStream, true, true)),
 		ai.WithTools(a.availableTools...),
-	}
-	modelName := ""
-	reasoningLevel := 0
-	if m, ok := models.FromContext(ctx); ok {
-		modelName = m.GetPrimary()
-		reasoningLevel = m.GetReasoningLevel()
-	}
-	if modelName != "" {
-		opts = append(opts,
-			ai.WithModelName(modelName),
-			ai.WithConfig(oai.GenerateConfig{ReasoningLevel: reasoningLevel}),
-		)
 	}
 
 	output := ChatTurnOutput{}

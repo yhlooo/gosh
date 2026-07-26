@@ -14,6 +14,8 @@ type Agent interface {
 	Initialize(ctx context.Context, opts Options) error
 	// Chat 发送指令开始一轮对话并等待指令处理完成
 	Chat(ctx context.Context, prompt string) error
+	// GenCmdlineSuggestion 生成建议的命令行后续内容
+	GenCmdlineSuggestion(ctx context.Context) (string, error)
 	// Cancel 取消当前正在处理的指令
 	Cancel() error
 }

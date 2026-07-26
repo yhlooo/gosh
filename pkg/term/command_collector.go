@@ -189,11 +189,16 @@ func (cc *CommandCollector) Resize(rows, cols int) {
 	cc.cmdBuff.Resize(rows, cols)
 }
 
-// CurrentPromptAndCommand 当前输入提示和输入的命令
+// CurrentPromptAndCommand 当前输入提示和未提交的命令
 func (cc *CommandCollector) CurrentPromptAndCommand() []byte {
 	cc.lock.RLock()
 	defer cc.lock.RUnlock()
 	return append(bytes.Clone(cc.promptBuff.Bytes()), cc.cmdBuff.RecordedData()...)
+}
+
+// CurrentCommand 返回当前未提交的命令
+func (cc *CommandCollector) CurrentCommand() string {
+	return cc.cmdBuff.String()
 }
 
 // parseHandler 返回 ANSI 解析处理器
@@ -412,4 +417,22 @@ func (cc *CommandCollector) State() OutputState {
 	cc.lock.RLock()
 	defer cc.lock.RUnlock()
 	return cc.state
+}
+
+// CursorPos 获取当前光标位置
+func (cc *CommandCollector) CursorPos() (row, col int) {
+	return cc.cmdBuff.CursorPos()
+}
+
+// IsAtLineEnd 判断光标是否正在行尾
+func (cc *CommandCollector) IsAtLineEnd() bool {
+	row, col := cc.cmdBuff.CursorPos()
+	cols := cc.cmdBuff.Cols()
+	for i := col; i < cols; i++ {
+		cell := cc.cmdBuff.Cell(row, i)
+		if cell != nil && cell.Char != 0 && cell.Char != ' ' {
+			return false
+		}
+	}
+	return true
 }

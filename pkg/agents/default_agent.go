@@ -40,7 +40,8 @@ func (opts *GoshAgentOptions) Complete() {
 func NewGoshAgent(opts GoshAgentOptions) *GoshAgent {
 	opts.Complete()
 	return &GoshAgent{
-		opts: opts,
+		opts:                   opts,
+		cmdlineSuggestionCache: &CommandLineSuggestionCache{},
 	}
 }
 
@@ -54,7 +55,8 @@ type GoshAgent struct {
 	shellController  generic.ShellController
 	commandCollector *term.CommandCollector
 
-	chatTurnFlow ChatTurnFlow
+	chatTurnFlow             ChatTurnFlow
+	genCmdlineSuggestionFlow GenCmdlineSuggestionFlow
 
 	availableModels []models.ModelConfig
 	availableTools  []ai.ToolRef
@@ -62,6 +64,8 @@ type GoshAgent struct {
 
 	currentModels models.Models
 	session       *Session
+
+	cmdlineSuggestionCache *CommandLineSuggestionCache
 }
 
 // Session 会话
@@ -112,6 +116,7 @@ func (a *GoshAgent) Initialize(ctx context.Context, opts generic.Options) error 
 
 	// 注册 flows
 	a.chatTurnFlow = genkit.DefineFlow(a.g, "ChatTurn", a.handleChatTurn)
+	a.genCmdlineSuggestionFlow = genkit.DefineFlow(a.g, "GenCmdlineSuggestion", a.handleGenCmdlineSuggestion)
 
 	// 设置其它属性
 	a.genericOpts = opts

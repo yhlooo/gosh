@@ -95,6 +95,7 @@ func NewOptions() Options {
 type Options struct {
 	Shell          string
 	Model          string
+	LiteModel      string
 	VisionModel    string
 	ReasoningLevel int
 }
@@ -103,6 +104,7 @@ type Options struct {
 func (o *Options) AddPFlags(fs *pflag.FlagSet) {
 	fs.StringVarP(&o.Shell, "shell", "s", o.Shell, i18n.T(MsgOptsShellDesc))
 	fs.StringVarP(&o.Model, "model", "m", o.Model, i18n.T(MsgOptsModelDesc))
+	fs.StringVar(&o.LiteModel, "lite-model", o.LiteModel, i18n.T(MsgOptsLiteModelDesc))
 	fs.StringVar(&o.VisionModel, "vision-model", o.VisionModel, i18n.T(MsgOptsVisionModelDesc))
 	fs.IntVarP(&o.ReasoningLevel, "reasoning-level", "r", o.ReasoningLevel, i18n.T(MsgOptsReasoningLevelDesc))
 }
@@ -223,6 +225,9 @@ func run(ctx context.Context, opts Options) error {
 	m := cfg.DefaultModels
 	if opts.Model != "" {
 		m.Primary = opts.Model
+	}
+	if opts.LiteModel != "" {
+		m.Lite = opts.LiteModel
 	}
 	if opts.VisionModel != "" {
 		m.Vision = opts.VisionModel

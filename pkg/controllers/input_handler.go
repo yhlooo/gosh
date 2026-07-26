@@ -52,7 +52,16 @@ func (ctl *InputHandler) Write(p []byte) (n int, err error) {
 		}
 
 		// 回到 Ground 态，没有切换模式，把缓冲区刷掉
-		_, err = ctl.writeUpstream(append(ctl.inputBuff.Bytes(), c))
+		switch c {
+		case '\t':
+			if ctl.cmdlineSuggestion != "" {
+				_, err = ctl.writeUpstream(append(ctl.inputBuff.Bytes(), []byte(ctl.cmdlineSuggestion)...))
+			} else {
+				_, err = ctl.writeUpstream(append(ctl.inputBuff.Bytes(), c))
+			}
+		default:
+			_, err = ctl.writeUpstream(append(ctl.inputBuff.Bytes(), c))
+		}
 		ctl.inputBuff.Reset()
 		if err != nil {
 			return i, err
