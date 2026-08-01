@@ -19,7 +19,7 @@ Gosh 不是类似 Zsh / Bash 的真正的 Shell ，而是它们的增强包装�
    **脚本安装：**
 
    ```bash
-   curl -L https://raw.githubusercontent.com/yhlooo/gosh/refs/heads/master/scripts/install.sh | bash
+   curl -L https://raw.githubusercontent.com/yhlooo/gosh/refs/heads/main/scripts/install.sh | bash
    ```
 
    脚本将 `gosh` 安装到 `~/.local/bin` 目录。若该目录不在 `PATH` 变量中，需按照脚本提示添加。

@@ -19,7 +19,7 @@ Gosh is not a true shell like Zsh/Bash, but an enhanced wrapper for them. You ca
    **Install via script:**
 
    ```bash
-   curl -L https://raw.githubusercontent.com/yhlooo/gosh/refs/heads/master/scripts/install.sh | bash
+   curl -L https://raw.githubusercontent.com/yhlooo/gosh/refs/heads/main/scripts/install.sh | bash
    ```
 
    The script installs `gosh` to the `~/.local/bin` directory. If this directory is not in your `PATH`, follow the script's prompts to add it.
